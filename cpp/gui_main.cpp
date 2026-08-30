@@ -820,9 +820,43 @@ static std::map<int, std::wstring> getDialogFeedersCpp(HWND hWnd) {
     return res;
 }
 
+static HBRUSH g_hBrushDarkDlg = CreateSolidBrush(RGB(15, 23, 42)); // #0F172A
+static HBRUSH g_hBrushEditDark = CreateSolidBrush(RGB(15, 23, 42)); // #0F172A
+static HWND g_hLblActiveProfile = NULL;
+
+void refreshActiveProfileLabelCpp() {
+    if (g_hLblActiveProfile) {
+        std::wstring text = L"⚙️ Quy Tắc Feeder: [" + g_active_profile + L"]";
+        SetWindowTextW(g_hLblActiveProfile, text.c_str());
+    }
+}
+
 // Feeder Dialog Proc
 LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
+    case WM_CTLCOLORDLG:
+        return (INT_PTR)g_hBrushDarkDlg;
+
+    case WM_CTLCOLORSTATIC: {
+        HDC hdc = (HDC)wParam;
+        SetBkMode(hdc, TRANSPARENT);
+        HWND hCtl = (HWND)lParam;
+        int id = GetDlgCtrlID(hCtl);
+        if (id >= 5001 && id <= 5050) {
+            SetTextColor(hdc, RGB(148, 163, 184)); // #94A3B8
+        } else {
+            SetTextColor(hdc, RGB(56, 189, 248)); // #38BDF8
+        }
+        return (INT_PTR)g_hBrushDarkDlg;
+    }
+
+    case WM_CTLCOLOREDIT: {
+        HDC hdc = (HDC)wParam;
+        SetTextColor(hdc, RGB(56, 189, 248)); // #38BDF8
+        SetBkColor(hdc, RGB(15, 23, 42));
+        return (INT_PTR)g_hBrushEditDark;
+    }
+
     case WM_COMMAND: {
         int wmId = LOWORD(wParam);
         int wmEvent = HIWORD(wParam);
@@ -837,8 +871,9 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
                 std::map<int, std::wstring> fd;
                 loadProfileFromDiskCpp(g_active_profile, fd);
                 updateDialogFromMapCpp(hWnd, fd);
+                refreshActiveProfileLabelCpp();
             }
-        } else if (wmId == 3002) { // ➕ Tạo Mới Profile
+        } else if (wmId == 3002) { // + Tạo Mới Profile
             std::wstring newName;
             if (showInputBoxCpp(hWnd, L"Tạo Cấu Hình Mới", L"Nhập tên cấu hình mới (VD: Bo_Mach_A):", newName)) {
                 auto fd = getDialogFeedersCpp(hWnd);
@@ -854,13 +889,15 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
                     if (plist[i] == g_active_profile) selIdx = (int)i;
                 }
                 SendMessageW(hCb, CB_SETCURSEL, selIdx, 0);
+                refreshActiveProfileLabelCpp();
                 MessageBoxW(hWnd, (L"🎉 Đã tạo cấu hình mới [" + newName + L"] thành công!").c_str(), L"Thành Công", MB_ICONINFORMATION);
             }
-        } else if (wmId == 3003) { // 💾 Lưu Profile
+        } else if (wmId == 3003) { // Lưu Profile
             auto fd = getDialogFeedersCpp(hWnd);
             saveProfileToDiskCpp(g_active_profile, fd);
+            refreshActiveProfileLabelCpp();
             MessageBoxW(hWnd, (L"💾 Đã lưu cấu hình [" + g_active_profile + L"] thành công!").c_str(), L"Thành Công", MB_ICONINFORMATION);
-        } else if (wmId == 3004) { // 📁 Lưu Thành (Save As)
+        } else if (wmId == 3004) { // Lưu Thành (Save As)
             std::wstring newName;
             if (showInputBoxCpp(hWnd, L"Lưu Thành Cấu Hình Khác", L"Nhập tên cấu hình mới:", newName)) {
                 auto fd = getDialogFeedersCpp(hWnd);
@@ -876,9 +913,10 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
                     if (plist[i] == g_active_profile) selIdx = (int)i;
                 }
                 SendMessageW(hCb, CB_SETCURSEL, selIdx, 0);
+                refreshActiveProfileLabelCpp();
                 MessageBoxW(hWnd, (L"🎉 Đã lưu thành cấu hình [" + newName + L"] thành công!").c_str(), L"Thành Công", MB_ICONINFORMATION);
             }
-        } else if (wmId == 3005) { // 🗑️ Xóa Profile
+        } else if (wmId == 3005) { // Xóa Profile
             if (g_active_profile == L"Mac_Dinh" || g_active_profile == L"Mặc Định" || g_active_profile.empty()) {
                 MessageBoxW(hWnd, L"Cấu hình mặc định [Mac_Dinh] là cấu hình gốc của máy và không thể xóa!", L"Thông Báo", MB_ICONWARNING);
                 break;
@@ -899,9 +937,10 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
                 std::map<int, std::wstring> fd;
                 loadProfileFromDiskCpp(g_active_profile, fd);
                 updateDialogFromMapCpp(hWnd, fd);
+                refreshActiveProfileLabelCpp();
                 MessageBoxW(hWnd, L"Đã xóa cấu hình! Đã tự động chuyển về [Mac_Dinh].", L"Thành Công", MB_ICONINFORMATION);
             }
-        } else if (wmId == IDOK || wmId == 2001) { // 💾 Lưu & Áp Dụng
+        } else if (wmId == IDOK || wmId == 2001) { // LƯU & ÁP DỤNG
             auto fd = getDialogFeedersCpp(hWnd);
             saveProfileToDiskCpp(g_active_profile, fd);
 
@@ -913,8 +952,9 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
             for (auto& c : g_top_components) c.feeder_no = matchFeederSlot(c.comment, c.footprint);
             for (auto& c : g_bot_components) c.feeder_no = matchFeederSlot(c.comment, c.footprint);
             refreshListView();
+            refreshActiveProfileLabelCpp();
 
-            MessageBoxW(hWnd, L"🎉 Đã lưu cấu hình và tự động gán lại toàn bộ số khay Feeder trên bảng mạch!", L"Thành Công", MB_ICONINFORMATION);
+            MessageBoxW(hWnd, (L"🎉 Đã áp dụng bộ quy tắc [" + g_active_profile + L"] cho toàn bộ bảng linh kiện!").c_str(), L"Thành Công", MB_ICONINFORMATION);
             DestroyWindow(hWnd);
         } else if (wmId == IDCANCEL) {
             DestroyWindow(hWnd);
@@ -937,7 +977,7 @@ void openFeederMatrixDialog(HWND parent) {
     int dlgX = pr.left + (pr.right - pr.left - dlgW) / 2;
     int dlgY = pr.top + (pr.bottom - pr.top - dlgH) / 2;
 
-    HWND hDlg = CreateWindowExW(WS_EX_DLGMODALFRAME, L"#32770", L"⚙️ Quản Lý Cấu Hình 50 Khay Feeder 4 Góc (NeoDen YY1)",
+    HWND hDlg = CreateWindowExW(WS_EX_DLGMODALFRAME, L"#32770", L"Cấu Hình 50 Khay Feeder 4 Góc (NeoDen YY1)",
                                WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
                                dlgX, dlgY, dlgW, dlgH, parent, NULL, g_hInst, NULL);
     if (!hDlg) return;
@@ -945,10 +985,10 @@ void openFeederMatrixDialog(HWND parent) {
     SetWindowLongPtr(hDlg, DWLP_DLGPROC, (LONG_PTR)FeederDlgProc);
 
     // Profile Management Bar ở trên cùng
-    HWND hLblProf = CreateWindowExW(0, L"STATIC", L"📂 Cấu Hình:", WS_CHILD | WS_VISIBLE | SS_RIGHT, 15, 14, 90, 20, hDlg, NULL, g_hInst, NULL);
+    HWND hLblProf = CreateWindowExW(0, L"STATIC", L"Cấu Hình:", WS_CHILD | WS_VISIBLE | SS_RIGHT, 15, 14, 85, 20, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hLblProf, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hCbProf = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL, 110, 11, 160, 350, hDlg, (HMENU)3001, g_hInst, NULL);
+    HWND hCbProf = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL, 105, 11, 165, 350, hDlg, (HMENU)3001, g_hInst, NULL);
     SendMessageW(hCbProf, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
     auto plist = listFeederProfilesCpp();
@@ -959,29 +999,29 @@ void openFeederMatrixDialog(HWND parent) {
     }
     SendMessageW(hCbProf, CB_SETCURSEL, selIdx, 0);
 
-    HWND hBtnNew = CreateWindowExW(0, L"BUTTON", L"➕ Tạo Mới", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 280, 10, 85, 26, hDlg, (HMENU)3002, g_hInst, NULL);
+    HWND hBtnNew = CreateWindowExW(0, L"BUTTON", L"+ Tạo Mới", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 280, 10, 85, 26, hDlg, (HMENU)3002, g_hInst, NULL);
     SendMessageW(hBtnNew, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hBtnSaveP = CreateWindowExW(0, L"BUTTON", L"💾 Lưu", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 370, 10, 65, 26, hDlg, (HMENU)3003, g_hInst, NULL);
+    HWND hBtnSaveP = CreateWindowExW(0, L"BUTTON", L"Lưu", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 370, 10, 65, 26, hDlg, (HMENU)3003, g_hInst, NULL);
     SendMessageW(hBtnSaveP, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hBtnSaveAs = CreateWindowExW(0, L"BUTTON", L"📁 Lưu Thành...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 440, 10, 105, 26, hDlg, (HMENU)3004, g_hInst, NULL);
+    HWND hBtnSaveAs = CreateWindowExW(0, L"BUTTON", L"Lưu Thành...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 440, 10, 105, 26, hDlg, (HMENU)3004, g_hInst, NULL);
     SendMessageW(hBtnSaveAs, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
-    HWND hBtnDelP = CreateWindowExW(0, L"BUTTON", L"🗑️ Xóa", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 550, 10, 65, 26, hDlg, (HMENU)3005, g_hInst, NULL);
+    HWND hBtnDelP = CreateWindowExW(0, L"BUTTON", L"Xóa", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 550, 10, 65, 26, hDlg, (HMENU)3005, g_hInst, NULL);
     SendMessageW(hBtnDelP, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
     // 4 Khung GroupBox 4 Góc
-    HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" 📌 Góc Trên Trái (Khay 14 → 24) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 45, 305, 280, hDlg, NULL, g_hInst, NULL);
+    HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" [1] Góc Trên Trái (Khay 14 -> 24) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 45, 305, 280, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hGrp1, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hGrp2 = CreateWindowExW(0, L"BUTTON", L" 📌 Góc Trên Phải (Khay 40 → 50) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 335, 45, 305, 280, hDlg, NULL, g_hInst, NULL);
+    HWND hGrp2 = CreateWindowExW(0, L"BUTTON", L" [2] Góc Trên Phải (Khay 40 -> 50) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 335, 45, 305, 280, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hGrp2, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hGrp3 = CreateWindowExW(0, L"BUTTON", L" 📌 Góc Dưới Trái (Khay 1 → 13) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 330, 305, 330, hDlg, NULL, g_hInst, NULL);
+    HWND hGrp3 = CreateWindowExW(0, L"BUTTON", L" [3] Góc Dưới Trái (Khay 1 -> 13) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 330, 305, 330, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hGrp3, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hGrp4 = CreateWindowExW(0, L"BUTTON", L" 📌 Góc Dưới Phải (Khay 30 → 39) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 335, 330, 305, 330, hDlg, NULL, g_hInst, NULL);
+    HWND hGrp4 = CreateWindowExW(0, L"BUTTON", L" [4] Góc Dưới Phải (Khay 30 -> 39) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 335, 330, 305, 330, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hGrp4, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
     // 1. Góc Trên Trái: Khay 14..24 (#14 ở dưới cùng, #24 ở trên cùng)
@@ -1009,10 +1049,10 @@ void openFeederMatrixDialog(HWND parent) {
     }
 
     // Nút Lưu / Đóng ở dưới (Đã bỏ nút Mặc Định)
-    HWND hBtnSave = CreateWindowExW(0, L"BUTTON", L"💾 LƯU & ÁP DỤNG NGAY", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 440, 675, 200, 36, hDlg, (HMENU)2001, g_hInst, NULL);
+    HWND hBtnSave = CreateWindowExW(0, L"BUTTON", L"LƯU & ÁP DỤNG NGAY", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 440, 675, 200, 36, hDlg, (HMENU)2001, g_hInst, NULL);
     SendMessageW(hBtnSave, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"✖ Đóng", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 25, 675, 90, 36, hDlg, (HMENU)IDCANCEL, g_hInst, NULL);
+    HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"Đóng", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 25, 675, 90, 36, hDlg, (HMENU)IDCANCEL, g_hInst, NULL);
     SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 }
 
@@ -1238,11 +1278,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 145, 180, 120, 24, hWnd, (HMENU)402, g_hInst, NULL);
         SendMessageW(g_hRadioBot, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        HWND hBtnEdit = CreateWindowExW(0, L"BUTTON", L"Doi Khay Feeder", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1170, 178, 130, 26, hWnd, (HMENU)403, g_hInst, NULL);
-        SendMessageW(hBtnEdit, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
-
-        g_hStatus = CreateWindowExW(0, L"STATIC", L"Dang nap du lieu...", WS_CHILD | WS_VISIBLE, 275, 183, 880, 20, hWnd, (HMENU)104, g_hInst, NULL);
+        g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 275, 183, 500, 20, hWnd, (HMENU)104, g_hInst, NULL);
         SendMessageW(g_hStatus, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+        // Hiển thị bộ quy tắc Feeder đang áp dụng ra giao diện chính
+        g_hLblActiveProfile = CreateWindowExW(0, L"STATIC", (L"⚙️ Quy Tắc Feeder: [" + g_active_profile + L"]").c_str(), WS_CHILD | WS_VISIBLE | SS_RIGHT, 780, 182, 310, 22, hWnd, (HMENU)404, g_hInst, NULL);
+        SendMessageW(g_hLblActiveProfile, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+        HWND hBtnEdit = CreateWindowExW(0, L"BUTTON", L"⚙️ Cấu Hình Feeder...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1100, 178, 200, 26, hWnd, (HMENU)403, g_hInst, NULL);
+        SendMessageW(hBtnEdit, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         g_hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 35, 210, 1290, 390, hWnd, (HMENU)105, g_hInst, NULL);
         SendMessageW(g_hListView, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);

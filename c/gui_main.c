@@ -646,6 +646,18 @@ static void populate_profile_combobox_c(HWND hCb) {
     SendMessageW(hCb, CB_SETCURSEL, selIdx, 0);
 }
 
+static HBRUSH g_hBrushDarkDlg_c = NULL;
+static HBRUSH g_hBrushEditDark_c = NULL;
+static HWND g_hLblActiveProfile_c = NULL;
+
+static void refresh_active_profile_label_c(void) {
+    if (g_hLblActiveProfile_c) {
+        wchar_t buf[128];
+        swprintf(buf, 128, L"⚙️ Quy Tắc Feeder: [%ls]", g_active_profile_c);
+        SetWindowTextW(g_hLblActiveProfile_c, buf);
+    }
+}
+
 static void create_feeder_slot_control_c(HWND hParent, int slot, int x, int y, const char* val) {
     wchar_t lblText[32];
     swprintf(lblText, 32, L"#%02d:", slot);
@@ -660,6 +672,32 @@ static void create_feeder_slot_control_c(HWND hParent, int slot, int x, int y, c
 
 static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
+    case WM_CTLCOLORDLG:
+        if (!g_hBrushDarkDlg_c) g_hBrushDarkDlg_c = CreateSolidBrush(RGB(15, 23, 42));
+        return (INT_PTR)g_hBrushDarkDlg_c;
+
+    case WM_CTLCOLORSTATIC: {
+        HDC hdc = (HDC)wParam;
+        SetBkMode(hdc, TRANSPARENT);
+        HWND hCtl = (HWND)lParam;
+        int id = GetDlgCtrlID(hCtl);
+        if (id >= 5001 && id <= 5050) {
+            SetTextColor(hdc, RGB(148, 163, 184)); // #94A3B8
+        } else {
+            SetTextColor(hdc, RGB(56, 189, 248)); // #38BDF8
+        }
+        if (!g_hBrushDarkDlg_c) g_hBrushDarkDlg_c = CreateSolidBrush(RGB(15, 23, 42));
+        return (INT_PTR)g_hBrushDarkDlg_c;
+    }
+
+    case WM_CTLCOLOREDIT: {
+        HDC hdc = (HDC)wParam;
+        SetTextColor(hdc, RGB(56, 189, 248)); // #38BDF8
+        SetBkColor(hdc, RGB(15, 23, 42));
+        if (!g_hBrushEditDark_c) g_hBrushEditDark_c = CreateSolidBrush(RGB(15, 23, 42));
+        return (INT_PTR)g_hBrushEditDark_c;
+    }
+
     case WM_COMMAND: {
         int wmId = LOWORD(wParam);
         int wmEvent = HIWORD(wParam);
@@ -678,8 +716,9 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
                         SetWindowTextW(hEd, wVal);
                     }
                 }
+                refresh_active_profile_label_c();
             }
-        } else if (wmId == 3002) { // ➕ Tạo Mới
+        } else if (wmId == 3002) { // + Tạo Mới
             wchar_t newName[64] = {0};
             if (show_input_box_c(hWnd, L"Tạo Cấu Hình Mới", L"Nhập tên cấu hình mới (VD: Bo_Mach_A):", newName, 64)) {
                 for (int slot = 1; slot <= 50; ++slot) {
@@ -694,9 +733,10 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
                 save_profile_to_disk_c(g_active_profile_c);
                 HWND hCb = GetDlgItem(hWnd, 3001);
                 populate_profile_combobox_c(hCb);
+                refresh_active_profile_label_c();
                 MessageBoxW(hWnd, L"🎉 Đã tạo cấu hình mới thành công!", L"Thành Công", MB_ICONINFORMATION);
             }
-        } else if (wmId == 3003) { // 💾 Lưu
+        } else if (wmId == 3003) { // Lưu
             for (int slot = 1; slot <= 50; ++slot) {
                 HWND hEd = GetDlgItem(hWnd, 5000 + slot);
                 if (hEd) {
@@ -706,8 +746,9 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
                 }
             }
             save_profile_to_disk_c(g_active_profile_c);
+            refresh_active_profile_label_c();
             MessageBoxW(hWnd, L"💾 Đã lưu cấu hình hiện tại thành công!", L"Thành Công", MB_ICONINFORMATION);
-        } else if (wmId == 3004) { // 📁 Lưu Thành...
+        } else if (wmId == 3004) { // Lưu Thành...
             wchar_t newName[64] = {0};
             if (show_input_box_c(hWnd, L"Lưu Thành Cấu Hình Khác", L"Nhập tên cấu hình mới:", newName, 64)) {
                 for (int slot = 1; slot <= 50; ++slot) {
@@ -722,9 +763,10 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
                 save_profile_to_disk_c(g_active_profile_c);
                 HWND hCb = GetDlgItem(hWnd, 3001);
                 populate_profile_combobox_c(hCb);
+                refresh_active_profile_label_c();
                 MessageBoxW(hWnd, L"🎉 Đã lưu thành cấu hình mới!", L"Thành Công", MB_ICONINFORMATION);
             }
-        } else if (wmId == 3005) { // 🗑️ Xóa
+        } else if (wmId == 3005) { // Xóa
             if (wcscmp(g_active_profile_c, L"Mac_Dinh") == 0 || wcscmp(g_active_profile_c, L"Mặc Định") == 0 || g_active_profile_c[0] == L'\0') {
                 MessageBoxW(hWnd, L"Cấu hình mặc định [Mac_Dinh] là cấu hình gốc của máy và không thể xóa!", L"Thông Báo", MB_ICONWARNING);
                 break;
@@ -747,9 +789,10 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
                         SetWindowTextW(hEd, wVal);
                     }
                 }
+                refresh_active_profile_label_c();
                 MessageBoxW(hWnd, L"Đã xóa cấu hình! Đã tự động chuyển về [Mac_Dinh].", L"Thành Công", MB_ICONINFORMATION);
             }
-        } else if (wmId == IDOK || wmId == 2001) { // 💾 Lưu & Áp Dụng
+        } else if (wmId == IDOK || wmId == 2001) { // LƯU & ÁP DỤNG
             for (int slot = 1; slot <= 50; ++slot) {
                 HWND hEd = GetDlgItem(hWnd, 5000 + slot);
                 if (hEd) {
@@ -764,7 +807,8 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
                 g_components.items[i].feeder_no = match_feeder_slot_c(g_components.items[i].comment, g_components.items[i].footprint);
             }
             refresh_list_view();
-            MessageBoxW(hWnd, L"🎉 Đã lưu cấu hình và tự động gán lại toàn bộ số khay Feeder trên bảng mạch!", L"Thành Công", MB_ICONINFORMATION);
+            refresh_active_profile_label_c();
+            MessageBoxW(hWnd, L"🎉 Đã áp dụng cấu hình và cập nhật số khay Feeder trên bảng mạch!", L"Thành Công", MB_ICONINFORMATION);
             DestroyWindow(hWnd);
         } else if (wmId == IDCANCEL) {
             DestroyWindow(hWnd);
@@ -787,7 +831,7 @@ static void open_feeder_matrix_dialog_c(HWND parent) {
     int dlgX = pr.left + (pr.right - pr.left - dlgW) / 2;
     int dlgY = pr.top + (pr.bottom - pr.top - dlgH) / 2;
 
-    HWND hDlg = CreateWindowExW(WS_EX_DLGMODALFRAME, L"#32770", L"⚙️ Quản Lý Cấu Hình 50 Khay Feeder 4 Góc (NeoDen YY1)",
+    HWND hDlg = CreateWindowExW(WS_EX_DLGMODALFRAME, L"#32770", L"Cấu Hình 50 Khay Feeder 4 Góc (NeoDen YY1)",
                                WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
                                dlgX, dlgY, dlgW, dlgH, parent, NULL, g_hInst, NULL);
     if (!hDlg) return;
@@ -795,36 +839,36 @@ static void open_feeder_matrix_dialog_c(HWND parent) {
     SetWindowLongPtr(hDlg, DWLP_DLGPROC, (LONG_PTR)FeederDlgProcC);
 
     // Profile Bar ở trên
-    HWND hLblProf = CreateWindowExW(0, L"STATIC", L"📂 Cấu Hình:", WS_CHILD | WS_VISIBLE | SS_RIGHT, 15, 14, 90, 20, hDlg, NULL, g_hInst, NULL);
+    HWND hLblProf = CreateWindowExW(0, L"STATIC", L"Cấu Hình:", WS_CHILD | WS_VISIBLE | SS_RIGHT, 15, 14, 85, 20, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hLblProf, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hCbProf = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL, 110, 11, 160, 350, hDlg, (HMENU)3001, g_hInst, NULL);
+    HWND hCbProf = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL, 105, 11, 165, 350, hDlg, (HMENU)3001, g_hInst, NULL);
     SendMessageW(hCbProf, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
     populate_profile_combobox_c(hCbProf);
 
-    HWND hBtnNew = CreateWindowExW(0, L"BUTTON", L"➕ Tạo Mới", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 280, 10, 85, 26, hDlg, (HMENU)3002, g_hInst, NULL);
+    HWND hBtnNew = CreateWindowExW(0, L"BUTTON", L"+ Tạo Mới", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 280, 10, 85, 26, hDlg, (HMENU)3002, g_hInst, NULL);
     SendMessageW(hBtnNew, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hBtnSaveP = CreateWindowExW(0, L"BUTTON", L"💾 Lưu", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 370, 10, 65, 26, hDlg, (HMENU)3003, g_hInst, NULL);
+    HWND hBtnSaveP = CreateWindowExW(0, L"BUTTON", L"Lưu", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 370, 10, 65, 26, hDlg, (HMENU)3003, g_hInst, NULL);
     SendMessageW(hBtnSaveP, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hBtnSaveAs = CreateWindowExW(0, L"BUTTON", L"📁 Lưu Thành...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 440, 10, 105, 26, hDlg, (HMENU)3004, g_hInst, NULL);
+    HWND hBtnSaveAs = CreateWindowExW(0, L"BUTTON", L"Lưu Thành...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 440, 10, 105, 26, hDlg, (HMENU)3004, g_hInst, NULL);
     SendMessageW(hBtnSaveAs, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
-    HWND hBtnDelP = CreateWindowExW(0, L"BUTTON", L"🗑️ Xóa", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 550, 10, 65, 26, hDlg, (HMENU)3005, g_hInst, NULL);
+    HWND hBtnDelP = CreateWindowExW(0, L"BUTTON", L"Xóa", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 550, 10, 65, 26, hDlg, (HMENU)3005, g_hInst, NULL);
     SendMessageW(hBtnDelP, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
     // 4 Khung GroupBox 4 Góc
-    HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" 📌 Góc Trên Trái (Khay 14 → 24) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 45, 305, 280, hDlg, NULL, g_hInst, NULL);
+    HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" [1] Góc Trên Trái (Khay 14 -> 24) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 45, 305, 280, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hGrp1, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hGrp2 = CreateWindowExW(0, L"BUTTON", L" 📌 Góc Trên Phải (Khay 40 → 50) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 335, 45, 305, 280, hDlg, NULL, g_hInst, NULL);
+    HWND hGrp2 = CreateWindowExW(0, L"BUTTON", L" [2] Góc Trên Phải (Khay 40 -> 50) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 335, 45, 305, 280, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hGrp2, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hGrp3 = CreateWindowExW(0, L"BUTTON", L" 📌 Góc Dưới Trái (Khay 1 → 13) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 330, 305, 330, hDlg, NULL, g_hInst, NULL);
+    HWND hGrp3 = CreateWindowExW(0, L"BUTTON", L" [3] Góc Dưới Trái (Khay 1 -> 13) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 330, 305, 330, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hGrp3, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hGrp4 = CreateWindowExW(0, L"BUTTON", L" 📌 Góc Dưới Phải (Khay 30 → 39) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 335, 330, 305, 330, hDlg, NULL, g_hInst, NULL);
+    HWND hGrp4 = CreateWindowExW(0, L"BUTTON", L" [4] Góc Dưới Phải (Khay 30 -> 39) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 335, 330, 305, 330, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hGrp4, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
     // 1. Góc Trên Trái: Khay 14..24 (#14 ở dưới cùng, #24 ở trên cùng)
@@ -851,10 +895,10 @@ static void open_feeder_matrix_dialog_c(HWND parent) {
         create_feeder_slot_control_c(hDlg, slot, 345, 352 + i * 23, g_feeder_matrix_c[slot].comment);
     }
 
-    HWND hBtnSave = CreateWindowExW(0, L"BUTTON", L"💾 LƯU & ÁP DỤNG NGAY", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 440, 675, 200, 36, hDlg, (HMENU)2001, g_hInst, NULL);
+    HWND hBtnSave = CreateWindowExW(0, L"BUTTON", L"LƯU & ÁP DỤNG NGAY", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 440, 675, 200, 36, hDlg, (HMENU)2001, g_hInst, NULL);
     SendMessageW(hBtnSave, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"✖ Đóng", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 25, 675, 90, 36, hDlg, (HMENU)IDCANCEL, g_hInst, NULL);
+    HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"Đóng", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 25, 675, 90, 36, hDlg, (HMENU)IDCANCEL, g_hInst, NULL);
     SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 }
 
@@ -862,17 +906,17 @@ static void start_in_place_edit(int item, int sub_item) {
     if (item < 0 || sub_item < 1 || sub_item > 12) return;
     commit_in_place_edit(true);
 
-    RECT rc;
-    ListView_GetSubItemRect(g_hListView, item, sub_item, LVIR_BOUNDS, &rc);
-
-    wchar_t cur[256] = {0};
-    ListView_GetItemText(g_hListView, item, sub_item, cur, 256);
-
     g_inPlaceItem = item;
     g_inPlaceSubItem = sub_item;
 
+    RECT rc;
+    ListView_GetSubItemRect(g_hListView, item, sub_item, LVIR_LABEL, &rc);
+
+    wchar_t text[256] = {0};
+    ListView_GetItemText(g_hListView, item, sub_item, text, 256);
+
     g_hInPlaceEdit = CreateWindowExW(
-        WS_EX_CLIENTEDGE, L"EDIT", cur,
+        WS_EX_CLIENTEDGE, L"EDIT", text,
         WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_LEFT,
         rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top + 1,
         g_hListView, (HMENU)9999, g_hInst, NULL
@@ -895,7 +939,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         g_hFontBold = CreateFontW(15, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         g_hFontNormal = CreateFontW(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
 
-        HWND hBtnFeeder = CreateWindowExW(0, L"BUTTON", L"⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1040, 14, 300, 38, hWnd, (HMENU)301, g_hInst, NULL);
+        wchar_t profBuf[128];
+        swprintf(profBuf, 128, L"⚙️ Quy Tắc Feeder: [%ls]", g_active_profile_c);
+        g_hLblActiveProfile_c = CreateWindowExW(0, L"STATIC", profBuf, WS_CHILD | WS_VISIBLE | SS_RIGHT, 900, 18, 240, 24, hWnd, (HMENU)404, g_hInst, NULL);
+        SendMessageW(g_hLblActiveProfile_c, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+        HWND hBtnFeeder = CreateWindowExW(0, L"BUTTON", L"⚙️ Cấu Hình Feeder 4 Góc", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1150, 14, 190, 32, hWnd, (HMENU)301, g_hInst, NULL);
         SendMessageW(hBtnFeeder, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" 1. File Altium Pick & Place Dau Vao ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 75, 1320, 70, hWnd, NULL, g_hInst, NULL);
@@ -921,7 +970,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 145, 180, 120, 24, hWnd, (HMENU)402, g_hInst, NULL);
         SendMessageW(g_hRadioBot, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        g_hStatus = CreateWindowExW(0, L"STATIC", L"Dang nap du lieu...", WS_CHILD | WS_VISIBLE, 275, 183, 1020, 20, hWnd, (HMENU)104, g_hInst, NULL);
+        g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 275, 183, 1020, 20, hWnd, (HMENU)104, g_hInst, NULL);
         SendMessageW(g_hStatus, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         g_hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 35, 210, 1290, 390, hWnd, (HMENU)105, g_hInst, NULL);

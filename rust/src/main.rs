@@ -217,6 +217,7 @@ struct AppState {
     h_status: HWND,
     h_radio_top: HWND,
     h_radio_bot: HWND,
+    h_lbl_active_profile: HWND,
     font_main_title: HFONT,
     font_main_bold: HFONT,
     font_main_sub: HFONT,
@@ -242,6 +243,7 @@ static STATE: Mutex<AppState> = Mutex::new(AppState {
     h_status: ptr::null_mut(),
     h_radio_top: ptr::null_mut(),
     h_radio_bot: ptr::null_mut(),
+    h_lbl_active_profile: ptr::null_mut(),
     font_main_title: ptr::null_mut(),
     font_main_bold: ptr::null_mut(),
     font_main_sub: ptr::null_mut(),
@@ -336,10 +338,27 @@ unsafe extern "system" {
     fn SetFocus(hWnd: HWND) -> HWND;
     fn CallWindowProcW(lpPrevWndFunc: isize, hWnd: HWND, Msg: u32, wParam: usize, lParam: isize) -> isize;
     fn GetDlgItem(hDlg: HWND, nIDDlgItem: i32) -> HWND;
+    fn GetDlgCtrlID(hWnd: HWND) -> i32;
+    fn SetBkColor(hdc: HDC, color: u32) -> u32;
     fn EnableWindow(hWnd: HWND, bEnable: i32) -> i32;
     fn IsWindow(hWnd: HWND) -> i32;
     fn IsDialogMessageW(hDlg: HWND, lpMsg: *mut MSG) -> i32;
     fn SetForegroundWindow(hWnd: HWND) -> i32;
+}
+
+static mut G_BRUSH_DARK_DLG_RUST: HBRUSH = ptr::null_mut();
+static mut G_BRUSH_EDIT_DARK_RUST: HBRUSH = ptr::null_mut();
+
+unsafe fn refresh_active_profile_label_rust() {
+    let (hwnd_lbl, act_name) = {
+        let state = STATE.lock().unwrap();
+        let act = ACTIVE_PROFILE_RUST.lock().unwrap();
+        (state.h_lbl_active_profile, act.clone())
+    };
+    if !hwnd_lbl.is_null() {
+        let text = format!("⚙️ Quy Tắc Feeder: [{}]", if act_name.is_empty() { "Mac_Dinh" } else { &act_name });
+        SetWindowTextW(hwnd_lbl, to_wstr(&text).as_ptr());
+    }
 }
 
 fn to_wstr(s: &str) -> Vec<u16> {
@@ -1242,6 +1261,35 @@ unsafe fn create_feeder_slot_control_rust(h_parent: HWND, slot: i32, x: i32, y: 
 
 unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize {
     match msg {
+        0x0136 => { // WM_CTLCOLORDLG
+            if G_BRUSH_DARK_DLG_RUST.is_null() {
+                G_BRUSH_DARK_DLG_RUST = CreateSolidBrush(0x002A170F); // RGB(15, 23, 42)
+            }
+            G_BRUSH_DARK_DLG_RUST as isize
+        }
+        0x0138 => { // WM_CTLCOLORSTATIC
+            let hdc = wparam as HDC;
+            SetBkMode(hdc, 1 /* TRANSPARENT */);
+            let id = GetDlgCtrlID(lparam as HWND);
+            if id >= 5001 && id <= 5050 {
+                SetTextColor(hdc, 0x00B8A394); // #94A3B8
+            } else {
+                SetTextColor(hdc, 0x00F8BD38); // #38BDF8
+            }
+            if G_BRUSH_DARK_DLG_RUST.is_null() {
+                G_BRUSH_DARK_DLG_RUST = CreateSolidBrush(0x002A170F);
+            }
+            G_BRUSH_DARK_DLG_RUST as isize
+        }
+        0x0133 => { // WM_CTLCOLOREDIT
+            let hdc = wparam as HDC;
+            SetTextColor(hdc, 0x00F8BD38); // #38BDF8
+            SetBkColor(hdc, 0x002A170F);
+            if G_BRUSH_EDIT_DARK_RUST.is_null() {
+                G_BRUSH_EDIT_DARK_RUST = CreateSolidBrush(0x002A170F);
+            }
+            G_BRUSH_EDIT_DARK_RUST as isize
+        }
         0x0111 => { // WM_COMMAND
             let id = (wparam & 0xFFFF) as u32;
             let code = ((wparam >> 16) & 0xFFFF) as u16;
@@ -1265,8 +1313,9 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                             SetWindowTextW(h_ed, to_wstr(val).as_ptr());
                         }
                     }
+                    refresh_active_profile_label_rust();
                 }
-            } else if id == 3002 { // ➕ Tạo Mới
+            } else if id == 3002 { // + Tạo Mới
                 if let Some(new_name) = show_input_box_rust(hwnd, "Tạo Cấu Hình Mới", "Nhập tên cấu hình mới (VD: Bo_Mach_A):") {
                     let mut map = std::collections::HashMap::new();
                     for slot in 1..=50 {
@@ -1291,9 +1340,10 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                         if p == &new_name { sel_idx = i; }
                     }
                     SendMessageW(h_cb, 0x014E /* CB_SETCURSEL */, sel_idx, 0);
+                    refresh_active_profile_label_rust();
                     MessageBoxW(hwnd, to_wstr("🎉 Đã tạo cấu hình mới thành công!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
                 }
-            } else if id == 3003 { // 💾 Lưu
+            } else if id == 3003 { // Lưu
                 let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
                 let mut map = std::collections::HashMap::new();
                 for slot in 1..=50 {
@@ -1305,8 +1355,9 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                     }
                 }
                 save_profile_to_disk_rust(if act_name.is_empty() { "Mac_Dinh" } else { &act_name }, &map);
+                refresh_active_profile_label_rust();
                 MessageBoxW(hwnd, to_wstr("💾 Đã lưu cấu hình hiện tại thành công!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
-            } else if id == 3004 { // 📁 Lưu Thành...
+            } else if id == 3004 { // Lưu Thành...
                 if let Some(new_name) = show_input_box_rust(hwnd, "Lưu Thành Cấu Hình Khác", "Nhập tên cấu hình mới:") {
                     let mut map = std::collections::HashMap::new();
                     for slot in 1..=50 {
@@ -1331,9 +1382,10 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                         if p == &new_name { sel_idx = i; }
                     }
                     SendMessageW(h_cb, 0x014E /* CB_SETCURSEL */, sel_idx, 0);
+                    refresh_active_profile_label_rust();
                     MessageBoxW(hwnd, to_wstr("🎉 Đã lưu thành cấu hình mới!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
                 }
-            } else if id == 3005 { // 🗑️ Xóa
+            } else if id == 3005 { // Xóa
                 let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
                 if act_name == "Mac_Dinh" || act_name == "Mặc Định" || act_name.is_empty() {
                     MessageBoxW(hwnd, to_wstr("Cấu hình mặc định [Mac_Dinh] là cấu hình gốc của máy và không thể xóa!").as_ptr(), to_wstr("Thông Báo").as_ptr(), 0x00000030);
@@ -1363,9 +1415,10 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                             SetWindowTextW(h_ed, to_wstr(val).as_ptr());
                         }
                     }
+                    refresh_active_profile_label_rust();
                     MessageBoxW(hwnd, to_wstr("Đã xóa cấu hình! Đã tự động chuyển về [Mac_Dinh].").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
                 }
-            } else if id == 1 || id == 2001 { // 💾 Lưu & Áp Dụng
+            } else if id == 1 || id == 2001 { // LƯU & ÁP DỤNG
                 let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
                 let mut map = std::collections::HashMap::new();
                 for slot in 1..=50 {
@@ -1394,7 +1447,8 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                     }
                 }
                 refresh_list_view();
-                MessageBoxW(hwnd, to_wstr("🎉 Đã lưu cấu hình và tự động gán lại toàn bộ số khay Feeder trên bảng mạch!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
+                refresh_active_profile_label_rust();
+                MessageBoxW(hwnd, to_wstr("🎉 Đã áp dụng cấu hình và cập nhật số khay Feeder trên bảng mạch!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
                 DestroyWindow(hwnd);
             } else if id == 2 { // Cancel
                 DestroyWindow(hwnd);
@@ -1419,7 +1473,7 @@ unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
 
     let hinst = GetModuleHandleW(ptr::null());
     let h_dlg = CreateWindowExW(
-        0x00000001, to_wstr("#32770").as_ptr(), to_wstr("⚙️ Quản Lý Cấu Hình 50 Khay Feeder 4 Góc (NeoDen YY1)").as_ptr(),
+        0x00000001, to_wstr("#32770").as_ptr(), to_wstr("Cấu Hình 50 Khay Feeder 4 Góc (NeoDen YY1)").as_ptr(),
         0x80000000 | 0x00C00000 | 0x00080000 | 0x10000000,
         dlg_x, dlg_y, dlg_w, dlg_h, parent, ptr::null_mut(), hinst, ptr::null_mut()
     );
@@ -1437,10 +1491,10 @@ unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
     };
 
     // Profile Bar
-    let h_lbl_prof = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("📂 Cấu Hình:").as_ptr(), 0x50000002, 15, 14, 90, 20, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    let h_lbl_prof = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Cấu Hình:").as_ptr(), 0x50000002, 15, 14, 85, 20, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
     SendMessageW(h_lbl_prof, 0x0030, font_bold as usize, 1);
 
-    let h_cb_prof = CreateWindowExW(0, to_wstr("COMBOBOX").as_ptr(), to_wstr("").as_ptr(), 0x50000003 | 0x00200000, 110, 11, 160, 350, h_dlg, 3001 as *mut _, hinst, ptr::null_mut());
+    let h_cb_prof = CreateWindowExW(0, to_wstr("COMBOBOX").as_ptr(), to_wstr("").as_ptr(), 0x50000003 | 0x00200000, 105, 11, 165, 350, h_dlg, 3001 as *mut _, hinst, ptr::null_mut());
     SendMessageW(h_cb_prof, 0x0030, font_normal as usize, 1);
 
     let plist = list_feeder_profiles_rust();
@@ -1452,28 +1506,28 @@ unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
     }
     SendMessageW(h_cb_prof, 0x014E, sel_idx, 0);
 
-    let btn_new = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("➕ Tạo Mới").as_ptr(), 0x50000000, 280, 10, 85, 26, h_dlg, 3002 as *mut _, hinst, ptr::null_mut());
+    let btn_new = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("+ Tạo Mới").as_ptr(), 0x50000000, 280, 10, 85, 26, h_dlg, 3002 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_new, 0x0030, font_bold as usize, 1);
 
-    let btn_save_p = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("💾 Lưu").as_ptr(), 0x50000000, 370, 10, 65, 26, h_dlg, 3003 as *mut _, hinst, ptr::null_mut());
+    let btn_save_p = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Lưu").as_ptr(), 0x50000000, 370, 10, 65, 26, h_dlg, 3003 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_save_p, 0x0030, font_bold as usize, 1);
 
-    let btn_save_as = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("📁 Lưu Thành...").as_ptr(), 0x50000000, 440, 10, 105, 26, h_dlg, 3004 as *mut _, hinst, ptr::null_mut());
+    let btn_save_as = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Lưu Thành...").as_ptr(), 0x50000000, 440, 10, 105, 26, h_dlg, 3004 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_save_as, 0x0030, font_normal as usize, 1);
 
-    let btn_del_p = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("🗑️ Xóa").as_ptr(), 0x50000000, 550, 10, 65, 26, h_dlg, 3005 as *mut _, hinst, ptr::null_mut());
+    let btn_del_p = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Xóa").as_ptr(), 0x50000000, 550, 10, 65, 26, h_dlg, 3005 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_del_p, 0x0030, font_normal as usize, 1);
 
-    let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Trên Trái (Khay 14 → 24) ").as_ptr(), 0x50000007, 15, 45, 305, 280, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" [1] Góc Trên Trái (Khay 14 -> 24) ").as_ptr(), 0x50000007, 15, 45, 305, 280, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
     SendMessageW(grp1, 0x0030, font_bold as usize, 1);
 
-    let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Trên Phải (Khay 40 → 50) ").as_ptr(), 0x50000007, 335, 45, 305, 280, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" [2] Góc Trên Phải (Khay 40 -> 50) ").as_ptr(), 0x50000007, 335, 45, 305, 280, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
     SendMessageW(grp2, 0x0030, font_bold as usize, 1);
 
-    let grp3 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Dưới Trái (Khay 1 → 13) ").as_ptr(), 0x50000007, 15, 330, 305, 330, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    let grp3 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" [3] Góc Dưới Trái (Khay 1 -> 13) ").as_ptr(), 0x50000007, 15, 330, 305, 330, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
     SendMessageW(grp3, 0x0030, font_bold as usize, 1);
 
-    let grp4 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Dưới Phải (Khay 30 → 39) ").as_ptr(), 0x50000007, 335, 330, 305, 330, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    let grp4 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" [4] Góc Dưới Phải (Khay 30 -> 39) ").as_ptr(), 0x50000007, 335, 330, 305, 330, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
     SendMessageW(grp4, 0x0030, font_bold as usize, 1);
 
     let opt = FEEDER_MATRIX_RUST.lock().unwrap();
@@ -1506,10 +1560,10 @@ unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
         create_feeder_slot_control_rust(h_dlg, slot, 345, 352 + i * 23, val);
     }
 
-    let btn_save = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("💾 LƯU & ÁP DỤNG NGAY").as_ptr(), 0x50000001, 440, 675, 200, 36, h_dlg, 2001 as *mut _, hinst, ptr::null_mut());
+    let btn_save = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("LƯU & ÁP DỤNG NGAY").as_ptr(), 0x50000001, 440, 675, 200, 36, h_dlg, 2001 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_save, 0x0030, font_bold as usize, 1);
 
-    let btn_cancel = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("✖ Đóng").as_ptr(), 0x50000000, 25, 675, 90, 36, h_dlg, 2 as *mut _, hinst, ptr::null_mut());
+    let btn_cancel = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Đóng").as_ptr(), 0x50000000, 25, 675, 90, 36, h_dlg, 2 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_cancel, 0x0030, font_normal as usize, 1);
 }
 
@@ -1846,7 +1900,12 @@ fn main() {
             let font_normal = CreateFontW(15, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
             let font_bold = CreateFontW(15, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
 
-            let btn_feeder = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC").as_ptr(), 0x50000000, 1040, 14, 300, 38, hwnd, 301 as *mut _, hinst, ptr::null_mut());
+            let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
+            let prof_text = format!("⚙️ Quy Tắc Feeder: [{}]", if act_name.is_empty() { "Mac_Dinh" } else { &act_name });
+            state.h_lbl_active_profile = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr(&prof_text).as_ptr(), 0x50000002 /* SS_RIGHT */, 900, 18, 240, 24, hwnd, 404 as *mut _, hinst, ptr::null_mut());
+            SendMessageW(state.h_lbl_active_profile, 0x0030, font_bold as usize, 1);
+
+            let btn_feeder = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("⚙️ Cấu Hình Feeder 4 Góc").as_ptr(), 0x50000000, 1150, 14, 190, 32, hwnd, 301 as *mut _, hinst, ptr::null_mut());
             SendMessageW(btn_feeder, 0x0030, font_bold as usize, 1);
 
             let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 1. File Altium Pick & Place Đầu Vào ").as_ptr(), 0x50000007, 20, 75, 1320, 70, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
@@ -1871,7 +1930,7 @@ fn main() {
             state.h_radio_bot = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt BOTTOM").as_ptr(), 0x50000009, 145, 180, 120, 24, hwnd, 402 as *mut _, hinst, ptr::null_mut());
             SendMessageW(state.h_radio_bot, 0x0030, font_bold as usize, 1);
 
-            state.h_status = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Đang nạp dữ liệu...").as_ptr(), 0x50000000, 275, 183, 1020, 20, hwnd, 104 as *mut _, hinst, ptr::null_mut());
+            state.h_status = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chưa chọn file CAD nào").as_ptr(), 0x50000000, 275, 183, 1020, 20, hwnd, 104 as *mut _, hinst, ptr::null_mut());
             SendMessageW(state.h_status, 0x0030, font_bold as usize, 1);
 
             state.h_list_view = CreateWindowExW(0x00000200, to_wstr("SysListView32").as_ptr(), to_wstr("").as_ptr(), 0x50000001 | 0x0004, 35, 210, 1290, 390, hwnd, 105 as *mut _, hinst, ptr::null_mut());

@@ -309,6 +309,8 @@ class FeederMatrixDialog(tk.Toplevel):
             messagebox.showinfo("Thành Công", f"Đã xóa cấu hình [{prof_name}]! Đã tự động chuyển về [Mac_Dinh].", parent=self)
             
     def save_and_apply(self):
+        prof_name = self.profile_var.get().strip()
+        if not prof_name: prof_name = "Mac_Dinh"
         self.save_current_profile()
         for f_str, entry in self.entries.items():
             val = entry.get().strip()
@@ -317,9 +319,11 @@ class FeederMatrixDialog(tk.Toplevel):
             else:
                 self.app.feeder_matrix[f_str]["comment"] = val
             
+        self.app.active_profile = prof_name
         self.app.save_feeder_matrix_file()
+        self.app.update_active_profile_label()
         self.app.apply_feeder_assignments_to_components()
-        messagebox.showinfo("Thành Công", "🎉 Đã lưu cấu hình và tự động gán lại số khay Feeder trên toàn bộ bảng linh kiện!", parent=self)
+        messagebox.showinfo("Thành Công", f"🎉 Đã lưu cấu hình [{prof_name}] và tự động gán lại số khay Feeder trên toàn bộ bảng linh kiện!", parent=self)
         self.destroy()
 
 
@@ -438,6 +442,7 @@ class NeoDenYY1App:
         self.current_layer = "TOP"
         
         # Nạp ma trận Feeder
+        self.active_profile = "Mac_Dinh"
         self.feeder_matrix = {}
         self.load_feeder_matrix_file()
         
@@ -449,17 +454,25 @@ class NeoDenYY1App:
         self.root.deiconify()
         self.root.update()
         
+    def update_active_profile_label(self):
+        if hasattr(self, "lbl_active_profile"):
+            self.lbl_active_profile.config(text=f"⚙️ Quy Tắc Feeder: [{self.active_profile}]")
+            
     def load_feeder_matrix_file(self):
         if os.path.exists(self.matrix_file):
             try:
                 with open(self.matrix_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                    if "profile_name" in data:
+                        self.active_profile = data.get("profile_name", "Mac_Dinh")
                     if "quadrants" in data:
                         # Parse structured JSON
                         self.feeder_matrix = {}
                         for q_key, q_info in data["quadrants"].items():
                             for f_id, f_val in q_info.get("feeders", {}).items():
                                 self.feeder_matrix[str(f_id)] = f_val
+                    elif "feeders" in data:
+                        self.feeder_matrix = {str(k): v for k, v in data["feeders"].items()}
                     else:
                         self.feeder_matrix = data
                     return
@@ -549,9 +562,25 @@ class NeoDenYY1App:
         sub_lbl = ttk.Label(title_box, text="⚡ Tự động nạp 13 cột • Chỉnh sửa thông số trực tiếp • Thiết lập ma trận khay Feeder 4 góc (1..13, 14..24, 30..39, 40..50)", style="SubHeader.TLabel")
         sub_lbl.pack(anchor=tk.W, pady=(1, 0))
         
-        # Nút Cấu Hình Feeder 4 Góc
-        btn_feeder = ttk.Button(header_frame, text="⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC", style="Feeder.TButton", command=self.open_feeder_matrix_dialog)
-        btn_feeder.pack(side=tk.RIGHT, padx=5, pady=5)
+        # Nút Cấu Hình Feeder 4 Góc và Nhãn Profile Đang Áp Dụng
+        feeder_box = tk.Frame(header_frame, bg=bg_dark)
+        feeder_box.pack(side=tk.RIGHT, padx=5, pady=5)
+        
+        self.lbl_active_profile = tk.Label(
+            feeder_box,
+            text=f"⚙️ Quy Tắc Feeder: [{self.active_profile}]",
+            font=("Segoe UI", 9, "bold"),
+            fg="#A78BFA",
+            bg="#1E293B",
+            padx=10,
+            pady=6,
+            bd=1,
+            relief="ridge"
+        )
+        self.lbl_active_profile.pack(side=tk.LEFT, padx=(0, 8))
+        
+        btn_feeder = ttk.Button(feeder_box, text="⚙️ CẤU HÌNH KHAY FEEDER...", style="Feeder.TButton", command=self.open_feeder_matrix_dialog)
+        btn_feeder.pack(side=tk.LEFT)
         
         # --- KHỐI 1: CHỌN FILE ALTIUM ---
         input_frame = ttk.LabelFrame(main_container, text="  1. File Altium Pick & Place Đầu Vào  ", style="Card.TLabelframe", padding=10)
