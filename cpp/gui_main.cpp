@@ -581,14 +581,14 @@ void doSaveAndExport() {
 }
 
 
-// Helper vẽ 1 hàng Khay Feeder gồm Label Số Khay và Edit Box Nhập Trị Số
+// Helper vẽ 1 hàng Khay Feeder gồm Label Số Khay và Edit Box Nhập Trị Số gọn gàng
 static void createFeederSlotControl(HWND hParent, int slot, int x, int y, const std::wstring& val) {
     wchar_t lblText[32];
-    swprintf(lblText, 32, L"Khay %02d:", slot);
-    HWND hLbl = CreateWindowExW(0, L"STATIC", lblText, WS_CHILD | WS_VISIBLE | SS_RIGHT, x, y + 2, 58, 20, hParent, NULL, g_hInst, NULL);
+    swprintf(lblText, 32, L"#%02d:", slot);
+    HWND hLbl = CreateWindowExW(0, L"STATIC", lblText, WS_CHILD | WS_VISIBLE | SS_RIGHT, x, y + 2, 45, 18, hParent, NULL, g_hInst, NULL);
     SendMessageW(hLbl, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hEd = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", val.c_str(), WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, x + 62, y, 145, 24, hParent, (HMENU)(INT_PTR)(5000 + slot), g_hInst, NULL);
+    HWND hEd = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", val.c_str(), WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, x + 50, y, 220, 21, hParent, (HMENU)(INT_PTR)(5000 + slot), g_hInst, NULL);
     SendMessageW(hEd, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 }
 
@@ -641,7 +641,7 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 void openFeederMatrixDialog(HWND parent) {
     RECT pr;
     GetWindowRect(parent, &pr);
-    int dlgW = 985, dlgH = 765;
+    int dlgW = 660, dlgH = 720;
     int dlgX = pr.left + (pr.right - pr.left - dlgW) / 2;
     int dlgY = pr.top + (pr.bottom - pr.top - dlgH) / 2;
 
@@ -652,67 +652,51 @@ void openFeederMatrixDialog(HWND parent) {
 
     SetWindowLongPtr(hDlg, DWLP_DLGPROC, (LONG_PTR)FeederDlgProc);
 
-    // 4 Khung GroupBox bao quanh 4 Góc
-    HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" 📌 GÓC TRÊN BÊN TRÁI (Khay 14 → 24) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 10, 465, 305, hDlg, NULL, g_hInst, NULL);
+    // 4 Khung GroupBox 4 Góc
+    HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" 📌 Góc Trên Trái (Khay 14 → 24) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 10, 300, 280, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hGrp1, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hGrp2 = CreateWindowExW(0, L"BUTTON", L" 📌 GÓC TRÊN BÊN PHẢI (Khay 40 → 50) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 495, 10, 465, 305, hDlg, NULL, g_hInst, NULL);
+    HWND hGrp2 = CreateWindowExW(0, L"BUTTON", L" 📌 Góc Trên Phải (Khay 40 → 50) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 330, 10, 300, 280, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hGrp2, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hGrp3 = CreateWindowExW(0, L"BUTTON", L" 📌 GÓC DƯỚI BÊN TRÁI (Khay 1 → 13) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 325, 465, 335, hDlg, NULL, g_hInst, NULL);
+    HWND hGrp3 = CreateWindowExW(0, L"BUTTON", L" 📌 Góc Dưới Trái (Khay 1 → 13) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 295, 300, 330, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hGrp3, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hGrp4 = CreateWindowExW(0, L"BUTTON", L" 📌 GÓC DƯỚI BÊN PHẢI (Khay 30 → 39) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 495, 325, 465, 335, hDlg, NULL, g_hInst, NULL);
+    HWND hGrp4 = CreateWindowExW(0, L"BUTTON", L" 📌 Góc Dưới Phải (Khay 30 → 39) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 330, 295, 300, 330, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hGrp4, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    // 1. Góc Trên Trái: Khay 14..24 (14..19 Cột 1, 20..24 Cột 2)
-    for (int i = 0; i < 6; ++i) {
+    // 1. Góc Trên Trái: Khay 14..24 (1 cột duy nhất, 11 khay)
+    for (int i = 0; i < 11; ++i) {
         int slot = 14 + i;
-        createFeederSlotControl(hDlg, slot, 25, 40 + i * 42, g_feeder_matrix[slot].comment);
-    }
-    for (int i = 0; i < 5; ++i) {
-        int slot = 20 + i;
-        createFeederSlotControl(hDlg, slot, 245, 40 + i * 42, g_feeder_matrix[slot].comment);
+        createFeederSlotControl(hDlg, slot, 25, 32 + i * 22, g_feeder_matrix[slot].comment);
     }
 
-    // 2. Góc Trên Phải: Khay 40..50 (40..45 Cột 1, 46..50 Cột 2)
-    for (int i = 0; i < 6; ++i) {
+    // 2. Góc Trên Phải: Khay 40..50 (1 cột duy nhất, 11 khay)
+    for (int i = 0; i < 11; ++i) {
         int slot = 40 + i;
-        createFeederSlotControl(hDlg, slot, 505, 40 + i * 42, g_feeder_matrix[slot].comment);
-    }
-    for (int i = 0; i < 5; ++i) {
-        int slot = 46 + i;
-        createFeederSlotControl(hDlg, slot, 725, 40 + i * 42, g_feeder_matrix[slot].comment);
+        createFeederSlotControl(hDlg, slot, 340, 32 + i * 22, g_feeder_matrix[slot].comment);
     }
 
-    // 3. Góc Dưới Trái: Khay 1..13 (1..7 Cột 1, 8..13 Cột 2)
-    for (int i = 0; i < 7; ++i) {
+    // 3. Góc Dưới Trái: Khay 1..13 (1 cột duy nhất, 13 khay)
+    for (int i = 0; i < 13; ++i) {
         int slot = 1 + i;
-        createFeederSlotControl(hDlg, slot, 25, 355 + i * 40, g_feeder_matrix[slot].comment);
-    }
-    for (int i = 0; i < 6; ++i) {
-        int slot = 8 + i;
-        createFeederSlotControl(hDlg, slot, 245, 355 + i * 40, g_feeder_matrix[slot].comment);
+        createFeederSlotControl(hDlg, slot, 25, 318 + i * 23, g_feeder_matrix[slot].comment);
     }
 
-    // 4. Góc Dưới Phải: Khay 30..39 (30..34 Cột 1, 35..39 Cột 2)
-    for (int i = 0; i < 5; ++i) {
+    // 4. Góc Dưới Phải: Khay 30..39 (1 cột duy nhất, 10 khay)
+    for (int i = 0; i < 10; ++i) {
         int slot = 30 + i;
-        createFeederSlotControl(hDlg, slot, 505, 355 + i * 40, g_feeder_matrix[slot].comment);
-    }
-    for (int i = 0; i < 5; ++i) {
-        int slot = 35 + i;
-        createFeederSlotControl(hDlg, slot, 725, 355 + i * 40, g_feeder_matrix[slot].comment);
+        createFeederSlotControl(hDlg, slot, 340, 318 + i * 23, g_feeder_matrix[slot].comment);
     }
 
     // Nút Lưu / Khôi phục / Đóng ở dưới
-    HWND hBtnSave = CreateWindowExW(0, L"BUTTON", L"💾 LƯU CẤU HÌNH & ÁP DỤNG", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 640, 670, 320, 42, hDlg, (HMENU)2001, g_hInst, NULL);
+    HWND hBtnSave = CreateWindowExW(0, L"BUTTON", L"💾 LƯU & ÁP DỤNG", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 440, 635, 190, 36, hDlg, (HMENU)2001, g_hInst, NULL);
     SendMessageW(hBtnSave, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hBtnReset = CreateWindowExW(0, L"BUTTON", L"🔄 Khôi Phục Mặc Định", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 430, 670, 200, 42, hDlg, (HMENU)2002, g_hInst, NULL);
+    HWND hBtnReset = CreateWindowExW(0, L"BUTTON", L"🔄 Mặc Định", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 310, 635, 120, 36, hDlg, (HMENU)2002, g_hInst, NULL);
     SendMessageW(hBtnReset, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
-    HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"Đóng", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 315, 670, 105, 42, hDlg, (HMENU)IDCANCEL, g_hInst, NULL);
+    HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"Đóng", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 215, 635, 85, 36, hDlg, (HMENU)IDCANCEL, g_hInst, NULL);
     SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 }
 

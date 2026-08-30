@@ -1015,11 +1015,11 @@ unsafe fn create_feeder_slot_control_rust(h_parent: HWND, slot: i32, x: i32, y: 
         state.font_main_sub
     };
 
-    let lbl_text = to_wstr(&format!("Khay {:02}:", slot));
+    let lbl_text = to_wstr(&format!("#{:02}:", slot));
     let h_lbl = CreateWindowExW(
         0, to_wstr("STATIC").as_ptr(), lbl_text.as_ptr(),
         0x50000002 /* WS_CHILD | WS_VISIBLE | SS_RIGHT */,
-        x, y + 2, 58, 20, h_parent, ptr::null_mut(), hinst, ptr::null_mut()
+        x, y + 2, 45, 18, h_parent, ptr::null_mut(), hinst, ptr::null_mut()
     );
     SendMessageW(h_lbl, 0x0030, font_bold as usize, 1);
 
@@ -1027,7 +1027,7 @@ unsafe fn create_feeder_slot_control_rust(h_parent: HWND, slot: i32, x: i32, y: 
     let h_ed = CreateWindowExW(
         0x00000200, to_wstr("EDIT").as_ptr(), val_w.as_ptr(),
         0x50000080 /* WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL */,
-        x + 62, y, 145, 24, h_parent, (5000 + slot) as *mut _, hinst, ptr::null_mut()
+        x + 50, y, 220, 21, h_parent, (5000 + slot) as *mut _, hinst, ptr::null_mut()
     );
     SendMessageW(h_ed, 0x0030, font_normal as usize, 1);
 }
@@ -1098,8 +1098,8 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
 unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
     let mut pr: RECT = std::mem::zeroed();
     GetWindowRect(parent, &mut pr);
-    let dlg_w = 985;
-    let dlg_h = 765;
+    let dlg_w = 660;
+    let dlg_h = 720;
     let dlg_x = pr.left + (pr.right - pr.left - dlg_w) / 2;
     let dlg_y = pr.top + (pr.bottom - pr.top - dlg_h) / 2;
 
@@ -1122,75 +1122,55 @@ unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
         state.font_main_sub
     };
 
-    let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 GÓC TRÊN BÊN TRÁI (Khay 14 → 24) ").as_ptr(), 0x50000007, 15, 10, 465, 305, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Trên Trái (Khay 14 → 24) ").as_ptr(), 0x50000007, 15, 10, 300, 280, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
     SendMessageW(grp1, 0x0030, font_bold as usize, 1);
 
-    let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 GÓC TRÊN BÊN PHẢI (Khay 40 → 50) ").as_ptr(), 0x50000007, 495, 10, 465, 305, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Trên Phải (Khay 40 → 50) ").as_ptr(), 0x50000007, 330, 10, 300, 280, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
     SendMessageW(grp2, 0x0030, font_bold as usize, 1);
 
-    let grp3 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 GÓC DƯỚI BÊN TRÁI (Khay 1 → 13) ").as_ptr(), 0x50000007, 15, 325, 465, 335, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    let grp3 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Dưới Trái (Khay 1 → 13) ").as_ptr(), 0x50000007, 15, 295, 300, 330, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
     SendMessageW(grp3, 0x0030, font_bold as usize, 1);
 
-    let grp4 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 GÓC DƯỚI BÊN PHẢI (Khay 30 → 39) ").as_ptr(), 0x50000007, 495, 325, 465, 335, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    let grp4 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Dưới Phải (Khay 30 → 39) ").as_ptr(), 0x50000007, 330, 295, 300, 330, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
     SendMessageW(grp4, 0x0030, font_bold as usize, 1);
 
     let opt = FEEDER_MATRIX_RUST.lock().unwrap();
 
-    // 1. Góc Trên Trái: 14..24
-    for i in 0..6 {
+    // 1. Góc Trên Trái: 14..24 (1 cột duy nhất, 11 khay)
+    for i in 0..11 {
         let slot = 14 + i;
         let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
-        create_feeder_slot_control_rust(h_dlg, slot, 25, 40 + i * 42, val);
-    }
-    for i in 0..5 {
-        let slot = 20 + i;
-        let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
-        create_feeder_slot_control_rust(h_dlg, slot, 245, 40 + i * 42, val);
+        create_feeder_slot_control_rust(h_dlg, slot, 25, 32 + i * 22, val);
     }
 
-    // 2. Góc Trên Phải: 40..50
-    for i in 0..6 {
+    // 2. Góc Trên Phải: 40..50 (1 cột duy nhất, 11 khay)
+    for i in 0..11 {
         let slot = 40 + i;
         let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
-        create_feeder_slot_control_rust(h_dlg, slot, 505, 40 + i * 42, val);
-    }
-    for i in 0..5 {
-        let slot = 46 + i;
-        let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
-        create_feeder_slot_control_rust(h_dlg, slot, 725, 40 + i * 42, val);
+        create_feeder_slot_control_rust(h_dlg, slot, 340, 32 + i * 22, val);
     }
 
-    // 3. Góc Dưới Trái: 1..13
-    for i in 0..7 {
+    // 3. Góc Dưới Trái: 1..13 (1 cột duy nhất, 13 khay)
+    for i in 0..13 {
         let slot = 1 + i;
         let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
-        create_feeder_slot_control_rust(h_dlg, slot, 25, 355 + i * 40, val);
-    }
-    for i in 0..6 {
-        let slot = 8 + i;
-        let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
-        create_feeder_slot_control_rust(h_dlg, slot, 245, 355 + i * 40, val);
+        create_feeder_slot_control_rust(h_dlg, slot, 25, 318 + i * 23, val);
     }
 
-    // 4. Góc Dưới Phải: 30..39
-    for i in 0..5 {
+    // 4. Góc Dưới Phải: 30..39 (1 cột duy nhất, 10 khay)
+    for i in 0..10 {
         let slot = 30 + i;
         let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
-        create_feeder_slot_control_rust(h_dlg, slot, 505, 355 + i * 40, val);
-    }
-    for i in 0..5 {
-        let slot = 35 + i;
-        let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
-        create_feeder_slot_control_rust(h_dlg, slot, 725, 355 + i * 40, val);
+        create_feeder_slot_control_rust(h_dlg, slot, 340, 318 + i * 23, val);
     }
 
-    let btn_save = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("💾 LƯU CẤU HÌNH & ÁP DỤNG").as_ptr(), 0x50000001, 640, 670, 320, 42, h_dlg, 2001 as *mut _, hinst, ptr::null_mut());
+    let btn_save = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("💾 LƯU & ÁP DỤNG").as_ptr(), 0x50000001, 440, 635, 190, 36, h_dlg, 2001 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_save, 0x0030, font_bold as usize, 1);
 
-    let btn_reset = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("🔄 Khôi Phục Mặc Định").as_ptr(), 0x50000000, 430, 670, 200, 42, h_dlg, 2002 as *mut _, hinst, ptr::null_mut());
+    let btn_reset = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("🔄 Mặc Định").as_ptr(), 0x50000000, 310, 635, 120, 36, h_dlg, 2002 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_reset, 0x0030, font_normal as usize, 1);
 
-    let btn_cancel = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Đóng").as_ptr(), 0x50000000, 315, 670, 105, 42, h_dlg, 2 as *mut _, hinst, ptr::null_mut());
+    let btn_cancel = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Đóng").as_ptr(), 0x50000000, 215, 635, 85, 36, h_dlg, 2 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_cancel, 0x0030, font_normal as usize, 1);
 }
 

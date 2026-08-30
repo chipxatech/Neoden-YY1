@@ -127,13 +127,13 @@ class SplashScreen:
 
 
 class FeederMatrixDialog(tk.Toplevel):
-    """Hộp thoại cấu hình Ma trận 4 Góc Khay Feeder NeoDen YY1"""
+    """Hộp thoại cấu hình 50 Khay Feeder 4 Góc NeoDen YY1 gọn gàng"""
     def __init__(self, parent, app):
         super().__init__(parent)
         self.app = app
-        self.title("⚙️ Cấu Hình Ma Trận 4 Góc Khay Feeder - Máy NeoDen YY1")
-        self.geometry("1100x720")
-        self.minsize(980, 640)
+        self.title("⚙️ Cấu Hình 50 Khay Feeder 4 Góc - Máy NeoDen YY1")
+        self.geometry("660x730")
+        self.resizable(False, False)
         self.configure(bg="#0F172A")
         self.transient(parent)
         self.grab_set()
@@ -143,122 +143,71 @@ class FeederMatrixDialog(tk.Toplevel):
         
     def setup_ui(self):
         # Tiêu đề
-        hdr = tk.Frame(self, bg="#0F172A", padx=15, pady=10)
+        hdr = tk.Frame(self, bg="#0F172A", padx=15, pady=8)
         hdr.pack(fill=tk.X)
-        tk.Label(hdr, text="BẢNG THIẾT LẬP 4 GÓC KHAY FEEDER (NEODEN YY1 FEEDER MATRIX)", font=("Segoe UI", 13, "bold"), fg="#38BDF8", bg="#0F172A").pack(anchor=tk.W)
-        tk.Label(hdr, text="Cấu hình trước linh kiện được gắn trên từng khay Feeder. Khi nạp file Altium, phần mềm tự động gán chính xác số khay.", font=("Segoe UI", 9), fg="#94A3B8", bg="#0F172A").pack(anchor=tk.W)
+        tk.Label(hdr, text="⚙️ CẤU HÌNH 50 KHAY FEEDER 4 GÓC (NEODEN YY1)", font=("Segoe UI", 12, "bold"), fg="#38BDF8", bg="#0F172A").pack(anchor=tk.W)
+        tk.Label(hdr, text="Nhập nhãn / trị số linh kiện mặc định cho từng khay (1..13, 14..24, 30..39, 40..50)", font=("Segoe UI", 8), fg="#94A3B8", bg="#0F172A").pack(anchor=tk.W)
         
         # Container 4 góc
-        grid_frame = tk.Frame(self, bg="#0F172A", padx=10, pady=5)
+        grid_frame = tk.Frame(self, bg="#0F172A", padx=10, pady=2)
         grid_frame.pack(fill=tk.BOTH, expand=True)
-        grid_frame.rowconfigure(0, weight=1)
-        grid_frame.rowconfigure(1, weight=1)
         grid_frame.columnconfigure(0, weight=1)
         grid_frame.columnconfigure(1, weight=1)
         
-        # 4 Quadrants
-        self.build_quadrant(grid_frame, 0, 0, "GÓC TRÊN BÊN TRÁI (Khay 14 → 24)", range(14, 25), "#38BDF8", "#0369A1")
-        self.build_quadrant(grid_frame, 0, 1, "GÓC TRÊN BÊN PHẢI (Khay 40 → 50)", range(40, 51), "#F472B6", "#BE185D")
-        self.build_quadrant(grid_frame, 1, 0, "GÓC DƯỚI BÊN TRÁI (Khay 1 → 13)", range(1, 14), "#4ADE80", "#15803D")
-        self.build_quadrant(grid_frame, 1, 1, "GÓC DƯỚI BÊN PHẢI (Khay 30 → 39)", range(30, 40), "#FBBF24", "#B45309")
+        # 4 Quadrants (Mỗi góc 1 cột duy nhất, không xếp 2 hàng/cột)
+        self.build_quadrant(grid_frame, 0, 0, "📌 Góc Trên Trái (14 → 24)", range(14, 25), "#818CF8")
+        self.build_quadrant(grid_frame, 0, 1, "📌 Góc Trên Phải (40 → 50)", range(40, 51), "#34D399")
+        self.build_quadrant(grid_frame, 1, 0, "📌 Góc Dưới Trái (1 → 13)", range(1, 14), "#38BDF8")
+        self.build_quadrant(grid_frame, 1, 1, "📌 Góc Dưới Phải (30 → 39)", range(30, 40), "#FBBF24")
         
         # Footer buttons
-        btn_bar = tk.Frame(self, bg="#1E293B", padx=15, pady=10)
+        btn_bar = tk.Frame(self, bg="#1E293B", padx=15, pady=8)
         btn_bar.pack(fill=tk.X)
         
-        tk.Button(btn_bar, text="💾 LƯU CẤU HÌNH & ÁP DỤNG NGAY", font=("Segoe UI", 10, "bold"), bg="#10B981", fg="white", padx=15, pady=6, bd=0, command=self.save_and_apply).pack(side=tk.RIGHT, padx=5)
-        tk.Button(btn_bar, text="🔄 Khôi Phục Mặc Định", font=("Segoe UI", 9), bg="#475569", fg="white", padx=10, pady=6, bd=0, command=self.reset_default).pack(side=tk.RIGHT, padx=5)
-        tk.Button(btn_bar, text="✖ Đóng", font=("Segoe UI", 9), bg="#334155", fg="white", padx=10, pady=6, bd=0, command=self.destroy).pack(side=tk.LEFT)
+        tk.Button(btn_bar, text="💾 LƯU & ÁP DỤNG", font=("Segoe UI", 9, "bold"), bg="#10B981", fg="white", padx=15, pady=5, bd=0, command=self.save_and_apply).pack(side=tk.RIGHT, padx=5)
+        tk.Button(btn_bar, text="🔄 Mặc Định", font=("Segoe UI", 9), bg="#475569", fg="white", padx=10, pady=5, bd=0, command=self.reset_default).pack(side=tk.RIGHT, padx=5)
+        tk.Button(btn_bar, text="✖ Đóng", font=("Segoe UI", 9), bg="#334155", fg="white", padx=10, pady=5, bd=0, command=self.destroy).pack(side=tk.LEFT)
         
-    def build_quadrant(self, parent, row, col, title, feeder_range, border_color, tag_bg):
-        frame = tk.LabelFrame(parent, text=f"  {title}  ", font=("Segoe UI", 9, "bold"), fg=border_color, bg="#1E293B", bd=2, relief="groove", padx=5, pady=5)
-        frame.grid(row=row, column=col, sticky="nsew", padx=5, pady=5)
-        
-        # Canvas scrollable
-        canvas = tk.Canvas(frame, bg="#1E293B", highlightthickness=0)
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg="#1E293B")
-        
-        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        
-        # Header bảng
-        h_row = tk.Frame(scrollable_frame, bg="#334155", pady=2)
-        h_row.pack(fill=tk.X, pady=(0, 2))
-        tk.Label(h_row, text="Khay", width=5, font=("Segoe UI", 8, "bold"), fg="white", bg="#334155").pack(side=tk.LEFT, padx=1)
-        tk.Label(h_row, text="Linh Kiện (Comment)", width=15, font=("Segoe UI", 8, "bold"), fg="white", bg="#334155").pack(side=tk.LEFT, padx=1)
-        tk.Label(h_row, text="Footprint", width=10, font=("Segoe UI", 8, "bold"), fg="white", bg="#334155").pack(side=tk.LEFT, padx=1)
-        tk.Label(h_row, text="Head", width=5, font=("Segoe UI", 8, "bold"), fg="white", bg="#334155").pack(side=tk.LEFT, padx=1)
-        tk.Label(h_row, text="Tốc độ%", width=6, font=("Segoe UI", 8, "bold"), fg="white", bg="#334155").pack(side=tk.LEFT, padx=1)
+    def build_quadrant(self, parent, row, col, title, feeder_range, border_color):
+        frame = tk.LabelFrame(parent, text=f"  {title}  ", font=("Segoe UI", 9, "bold"), fg=border_color, bg="#1E293B", bd=2, relief="groove", padx=6, pady=4)
+        frame.grid(row=row, column=col, sticky="nsew", padx=4, pady=3)
         
         for f_no in feeder_range:
             f_str = str(f_no)
             cur = self.app.feeder_matrix.get(f_str, {"comment": "", "footprint": "0603", "head": 0, "speed": 100})
             
-            r = tk.Frame(scrollable_frame, bg="#1E293B", pady=1)
+            r = tk.Frame(frame, bg="#1E293B", pady=1)
             r.pack(fill=tk.X)
             
-            # Badge số khay
-            lbl_no = tk.Label(r, text=f"Khay {f_no:02d}:", width=8, font=("Segoe UI", 8, "bold"), fg="white", bg=tag_bg)
-            lbl_no.pack(side=tk.LEFT, padx=1)
+            lbl_no = tk.Label(r, text=f"#{f_no:02d}:", width=5, font=("Segoe UI", 8, "bold"), fg="#94A3B8", bg="#1E293B", anchor=tk.E)
+            lbl_no.pack(side=tk.LEFT, padx=(2, 4))
             
-            e_cmt = tk.Entry(r, width=15, font=("Segoe UI", 8), bg="#0F172A", fg="#F8FAFC", insertbackground="white")
+            e_cmt = tk.Entry(r, font=("Segoe UI", 8), bg="#0F172A", fg="#38BDF8", insertbackground="white", bd=1, relief="solid")
             e_cmt.insert(0, cur.get("comment", ""))
-            e_cmt.pack(side=tk.LEFT, padx=1)
+            e_cmt.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
             
-            e_fp = tk.Entry(r, width=10, font=("Segoe UI", 8), bg="#0F172A", fg="#F8FAFC", insertbackground="white")
-            e_fp.insert(0, cur.get("footprint", ""))
-            e_fp.pack(side=tk.LEFT, padx=1)
-            
-            e_head = ttk.Combobox(r, values=["0", "1"], width=3, font=("Segoe UI", 8), state="readonly")
-            e_head.set(str(cur.get("head", 0)))
-            e_head.pack(side=tk.LEFT, padx=1)
-            
-            e_spd = tk.Entry(r, width=6, font=("Segoe UI", 8), bg="#0F172A", fg="#F8FAFC", insertbackground="white")
-            e_spd.insert(0, str(cur.get("speed", 100)))
-            e_spd.pack(side=tk.LEFT, padx=1)
-            
-            self.entries[f_str] = {
-                "comment": e_cmt,
-                "footprint": e_fp,
-                "head": e_head,
-                "speed": e_spd
-            }
+            self.entries[f_str] = e_cmt
             
     def save_and_apply(self):
-        new_matrix = {}
-        for f_str, widgets in self.entries.items():
-            try: spd = int(widgets["speed"].get().strip())
-            except: spd = 100
-            try: hd = int(widgets["head"].get().strip())
-            except: hd = 0
+        for f_str, entry in self.entries.items():
+            val = entry.get().strip()
+            if f_str not in self.app.feeder_matrix:
+                self.app.feeder_matrix[f_str] = {"comment": val, "footprint": "0603", "head": 0, "speed": 100}
+            else:
+                self.app.feeder_matrix[f_str]["comment"] = val
             
-            new_matrix[f_str] = {
-                "comment": widgets["comment"].get().strip(),
-                "footprint": widgets["footprint"].get().strip(),
-                "head": hd,
-                "speed": spd
-            }
-            
-        self.app.feeder_matrix = new_matrix
         self.app.save_feeder_matrix_file()
         self.app.apply_feeder_assignments_to_components()
-        messagebox.showinfo("Thành Công", "Đã lưu ma trận 4 góc khay Feeder và cập nhật toàn bộ bảng dữ liệu!", parent=self)
+        messagebox.showinfo("Thành Công", "🎉 Đã lưu cấu hình 50 khay Feeder 4 góc và cập nhật bảng dữ liệu!", parent=self)
         self.destroy()
         
     def reset_default(self):
-        if messagebox.askyesno("Xác nhận", "Khôi phục toàn bộ bảng Feeder về mặc định ban đầu?", parent=self):
+        if messagebox.askyesno("Xác nhận", "Khôi phục toàn bộ nhãn 50 khay Feeder về mặc định ban đầu?", parent=self):
             self.app.feeder_matrix = json.loads(json.dumps(DEFAULT_FEEDER_DATA))
-            for f_str, widgets in self.entries.items():
-                cur = self.app.feeder_matrix.get(f_str, {"comment": "", "footprint": "0603", "head": 0, "speed": 100})
-                widgets["comment"].delete(0, tk.END); widgets["comment"].insert(0, cur.get("comment", ""))
-                widgets["footprint"].delete(0, tk.END); widgets["footprint"].insert(0, cur.get("footprint", ""))
-                widgets["head"].set(str(cur.get("head", 0)))
-                widgets["speed"].delete(0, tk.END); widgets["speed"].insert(0, str(cur.get("speed", 100)))
+            for f_str, entry in self.entries.items():
+                cur = self.app.feeder_matrix.get(f_str, {}).get("comment", "")
+                entry.delete(0, tk.END)
+                entry.insert(0, cur)
 
 
 class RowEditDialog(tk.Toplevel):
