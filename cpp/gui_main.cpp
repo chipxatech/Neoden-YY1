@@ -836,7 +836,7 @@ void refreshActiveProfileLabelCpp() {
 LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_CTLCOLORDLG:
-        return (INT_PTR)g_hBrushDarkDlg;
+        return (INT_PTR)GetSysColorBrush(COLOR_BTNFACE);
 
     case WM_CTLCOLORSTATIC: {
         HDC hdc = (HDC)wParam;
@@ -844,18 +844,18 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
         HWND hCtl = (HWND)lParam;
         int id = GetDlgCtrlID(hCtl);
         if (id >= 5001 && id <= 5050) {
-            SetTextColor(hdc, RGB(148, 163, 184)); // #94A3B8
+            SetTextColor(hdc, RGB(30, 41, 59)); // #1E293B (chữ tối rõ nét, nền trong suốt)
         } else {
-            SetTextColor(hdc, RGB(56, 189, 248)); // #38BDF8
+            SetTextColor(hdc, RGB(2, 132, 199)); // #0284C7
         }
-        return (INT_PTR)g_hBrushDarkDlg;
+        return (INT_PTR)GetSysColorBrush(COLOR_BTNFACE);
     }
 
     case WM_CTLCOLOREDIT: {
         HDC hdc = (HDC)wParam;
-        SetTextColor(hdc, RGB(56, 189, 248)); // #38BDF8
-        SetBkColor(hdc, RGB(15, 23, 42));
-        return (INT_PTR)g_hBrushEditDark;
+        SetTextColor(hdc, RGB(15, 23, 42)); // Chữ đen đậm
+        SetBkColor(hdc, RGB(255, 255, 255)); // Nền trắng sáng
+        return (INT_PTR)GetStockObject(WHITE_BRUSH);
     }
 
     case WM_COMMAND: {
@@ -1050,7 +1050,7 @@ void openFeederMatrixDialog(HWND parent) {
     }
 
     // Nút Lưu / Đóng ở dưới (Đã bỏ nút Mặc Định)
-    HWND hBtnSave = CreateWindowExW(0, L"BUTTON", L"LƯU & ÁP DỤNG NGAY", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 440, 675, 200, 36, hDlg, (HMENU)2001, g_hInst, NULL);
+    HWND hBtnSave = CreateWindowExW(0, L"BUTTON", L"LƯU VÀ ÁP DỤNG NGAY", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 440, 675, 200, 36, hDlg, (HMENU)2001, g_hInst, NULL);
     SendMessageW(hBtnSave, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
     HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"Đóng", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 25, 675, 90, 36, hDlg, (HMENU)IDCANCEL, g_hInst, NULL);

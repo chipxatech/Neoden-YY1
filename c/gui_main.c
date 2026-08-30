@@ -673,8 +673,7 @@ static void create_feeder_slot_control_c(HWND hParent, int slot, int x, int y, c
 static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_CTLCOLORDLG:
-        if (!g_hBrushDarkDlg_c) g_hBrushDarkDlg_c = CreateSolidBrush(RGB(15, 23, 42));
-        return (INT_PTR)g_hBrushDarkDlg_c;
+        return (INT_PTR)GetSysColorBrush(COLOR_BTNFACE);
 
     case WM_CTLCOLORSTATIC: {
         HDC hdc = (HDC)wParam;
@@ -682,20 +681,18 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
         HWND hCtl = (HWND)lParam;
         int id = GetDlgCtrlID(hCtl);
         if (id >= 5001 && id <= 5050) {
-            SetTextColor(hdc, RGB(148, 163, 184)); // #94A3B8
+            SetTextColor(hdc, RGB(30, 41, 59)); // #1E293B (chữ tối rõ nét trên nền xám)
         } else {
-            SetTextColor(hdc, RGB(56, 189, 248)); // #38BDF8
+            SetTextColor(hdc, RGB(2, 132, 199)); // #0284C7
         }
-        if (!g_hBrushDarkDlg_c) g_hBrushDarkDlg_c = CreateSolidBrush(RGB(15, 23, 42));
-        return (INT_PTR)g_hBrushDarkDlg_c;
+        return (INT_PTR)GetSysColorBrush(COLOR_BTNFACE);
     }
 
     case WM_CTLCOLOREDIT: {
         HDC hdc = (HDC)wParam;
-        SetTextColor(hdc, RGB(56, 189, 248)); // #38BDF8
-        SetBkColor(hdc, RGB(15, 23, 42));
-        if (!g_hBrushEditDark_c) g_hBrushEditDark_c = CreateSolidBrush(RGB(15, 23, 42));
-        return (INT_PTR)g_hBrushEditDark_c;
+        SetTextColor(hdc, RGB(15, 23, 42)); // Chữ đen đậm
+        SetBkColor(hdc, RGB(255, 255, 255)); // Nền trắng sáng
+        return (INT_PTR)GetStockObject(WHITE_BRUSH);
     }
 
     case WM_COMMAND: {
@@ -895,7 +892,7 @@ static void open_feeder_matrix_dialog_c(HWND parent) {
         create_feeder_slot_control_c(hDlg, slot, 345, 352 + i * 23, g_feeder_matrix_c[slot].comment);
     }
 
-    HWND hBtnSave = CreateWindowExW(0, L"BUTTON", L"LƯU & ÁP DỤNG NGAY", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 440, 675, 200, 36, hDlg, (HMENU)2001, g_hInst, NULL);
+    HWND hBtnSave = CreateWindowExW(0, L"BUTTON", L"LƯU VÀ ÁP DỤNG NGAY", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 440, 675, 200, 36, hDlg, (HMENU)2001, g_hInst, NULL);
     SendMessageW(hBtnSave, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
     HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"Đóng", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 25, 675, 90, 36, hDlg, (HMENU)IDCANCEL, g_hInst, NULL);

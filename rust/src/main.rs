@@ -346,6 +346,8 @@ unsafe extern "system" {
     fn IsWindow(hWnd: HWND) -> i32;
     fn IsDialogMessageW(hDlg: HWND, lpMsg: *mut MSG) -> i32;
     fn SetForegroundWindow(hWnd: HWND) -> i32;
+    fn GetSysColor(nIndex: i32) -> u32;
+    fn GetSysColorBrush(nIndex: i32) -> HBRUSH;
 }
 
 static mut G_BRUSH_DARK_DLG_RUST: HBRUSH = ptr::null_mut();
@@ -1265,33 +1267,24 @@ unsafe fn create_feeder_slot_control_rust(h_parent: HWND, slot: i32, x: i32, y: 
 unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize {
     match msg {
         0x0136 => { // WM_CTLCOLORDLG
-            if G_BRUSH_DARK_DLG_RUST.is_null() {
-                G_BRUSH_DARK_DLG_RUST = CreateSolidBrush(0x002A170F); // RGB(15, 23, 42)
-            }
-            G_BRUSH_DARK_DLG_RUST as isize
+            GetSysColorBrush(15 /* COLOR_BTNFACE */) as isize
         }
         0x0138 => { // WM_CTLCOLORSTATIC
             let hdc = wparam as HDC;
             SetBkMode(hdc, 1 /* TRANSPARENT */);
             let id = GetDlgCtrlID(lparam as HWND);
             if id >= 5001 && id <= 5050 {
-                SetTextColor(hdc, 0x00B8A394); // #94A3B8
+                SetTextColor(hdc, 0x003B291E); // #1E293B (chữ tối rõ nét trên nền xám)
             } else {
-                SetTextColor(hdc, 0x00F8BD38); // #38BDF8
+                SetTextColor(hdc, 0x00C78402); // #0284C7
             }
-            if G_BRUSH_DARK_DLG_RUST.is_null() {
-                G_BRUSH_DARK_DLG_RUST = CreateSolidBrush(0x002A170F);
-            }
-            G_BRUSH_DARK_DLG_RUST as isize
+            GetSysColorBrush(15 /* COLOR_BTNFACE */) as isize
         }
         0x0133 => { // WM_CTLCOLOREDIT
             let hdc = wparam as HDC;
-            SetTextColor(hdc, 0x00F8BD38); // #38BDF8
-            SetBkColor(hdc, 0x002A170F);
-            if G_BRUSH_EDIT_DARK_RUST.is_null() {
-                G_BRUSH_EDIT_DARK_RUST = CreateSolidBrush(0x002A170F);
-            }
-            G_BRUSH_EDIT_DARK_RUST as isize
+            SetTextColor(hdc, 0x002A170F); // Chữ đen đậm
+            SetBkColor(hdc, 0x00FFFFFF); // Nền trắng sáng
+            GetStockObject(0 /* WHITE_BRUSH */) as isize
         }
         0x0111 => { // WM_COMMAND
             let id = (wparam & 0xFFFF) as u32;
@@ -1563,7 +1556,7 @@ unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
         create_feeder_slot_control_rust(h_dlg, slot, 345, 352 + i * 23, val);
     }
 
-    let btn_save = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("LƯU & ÁP DỤNG NGAY").as_ptr(), 0x50000001, 440, 675, 200, 36, h_dlg, 2001 as *mut _, hinst, ptr::null_mut());
+    let btn_save = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("LƯU VÀ ÁP DỤNG NGAY").as_ptr(), 0x50000001, 440, 675, 200, 36, h_dlg, 2001 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_save, 0x0030, font_bold as usize, 1);
 
     let btn_cancel = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Đóng").as_ptr(), 0x50000000, 25, 675, 90, 36, h_dlg, 2 as *mut _, hinst, ptr::null_mut());

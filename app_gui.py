@@ -134,7 +134,7 @@ class FeederMatrixDialog(tk.Toplevel):
         self.title("⚙️ Quản Lý Cấu Hình 50 Khay Feeder 4 Góc - Máy NeoDen YY1")
         self.geometry("700x780")
         self.resizable(False, False)
-        self.configure(bg="#0F172A")
+        self.configure(bg="#F1F5F9")
         self.transient(parent)
         self.grab_set()
         
@@ -148,16 +148,16 @@ class FeederMatrixDialog(tk.Toplevel):
         
     def setup_ui(self):
         # Header banner
-        hdr = tk.Frame(self, bg="#0F172A", padx=15, pady=8)
+        hdr = tk.Frame(self, bg="#F1F5F9", padx=15, pady=8)
         hdr.pack(fill=tk.X)
-        tk.Label(hdr, text="⚙️ CẤU HÌNH 50 KHAY FEEDER 4 GÓC (NEODEN YY1)", font=("Segoe UI", 12, "bold"), fg="#38BDF8", bg="#0F172A").pack(anchor=tk.W)
-        tk.Label(hdr, text="Quản lý nhiều cấu hình linh kiện mặc định cho từng dự án mạch. Số 1, 14, 30, 40 nằm ở phía dưới.", font=("Segoe UI", 8), fg="#94A3B8", bg="#0F172A").pack(anchor=tk.W)
+        tk.Label(hdr, text="⚙️ CẤU HÌNH 50 KHAY FEEDER 4 GÓC (NEODEN YY1)", font=("Segoe UI", 12, "bold"), fg="#0284C7", bg="#F1F5F9").pack(anchor=tk.W)
+        tk.Label(hdr, text="Quản lý nhiều cấu hình linh kiện mặc định cho từng dự án mạch. Số 1, 14, 30, 40 nằm ở phía dưới.", font=("Segoe UI", 8), fg="#475569", bg="#F1F5F9").pack(anchor=tk.W)
         
         # Profile Management Bar
-        prof_bar = tk.Frame(self, bg="#1E293B", padx=10, pady=6, bd=1, relief="ridge")
+        prof_bar = tk.Frame(self, bg="#FFFFFF", padx=10, pady=6, bd=1, relief="solid")
         prof_bar.pack(fill=tk.X, padx=10, pady=(2, 6))
         
-        tk.Label(prof_bar, text="📂 Cấu Hình (Profile):", font=("Segoe UI", 9, "bold"), fg="#38BDF8", bg="#1E293B").pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(prof_bar, text="📂 Cấu Hình (Profile):", font=("Segoe UI", 9, "bold"), fg="#0284C7", bg="#FFFFFF").pack(side=tk.LEFT, padx=(0, 6))
         
         self.cb_profile = ttk.Combobox(prof_bar, textvariable=self.profile_var, state="readonly", width=22, font=("Segoe UI", 9, "bold"))
         self.cb_profile.pack(side=tk.LEFT, padx=(0, 8))
@@ -169,39 +169,39 @@ class FeederMatrixDialog(tk.Toplevel):
         tk.Button(prof_bar, text="🗑️ Xóa", font=("Segoe UI", 8), bg="#EF4444", fg="white", padx=8, pady=3, bd=0, command=self.delete_profile).pack(side=tk.LEFT, padx=3)
         
         # Container 4 góc
-        grid_frame = tk.Frame(self, bg="#0F172A", padx=8, pady=0)
+        grid_frame = tk.Frame(self, bg="#F1F5F9", padx=8, pady=0)
         grid_frame.pack(fill=tk.BOTH, expand=True)
         grid_frame.columnconfigure(0, weight=1)
         grid_frame.columnconfigure(1, weight=1)
         
         # 4 Quadrants (Mỗi góc 1 cột duy nhất, số 1, 14, 30, 40 ở phía dưới)
-        self.build_quadrant(grid_frame, 0, 0, "📌 Góc Trên Trái (14 → 24)", range(24, 13, -1), "#818CF8")
-        self.build_quadrant(grid_frame, 0, 1, "📌 Góc Trên Phải (40 → 50)", range(50, 39, -1), "#34D399")
-        self.build_quadrant(grid_frame, 1, 0, "📌 Góc Dưới Trái (1 → 13)", range(13, 0, -1), "#38BDF8")
-        self.build_quadrant(grid_frame, 1, 1, "📌 Góc Dưới Phải (30 → 39)", range(39, 29, -1), "#FBBF24")
+        self.build_quadrant(grid_frame, 0, 0, "📌 Góc Trên Trái (14 → 24)", range(24, 13, -1), "#0284C7")
+        self.build_quadrant(grid_frame, 0, 1, "📌 Góc Trên Phải (40 → 50)", range(50, 39, -1), "#059669")
+        self.build_quadrant(grid_frame, 1, 0, "📌 Góc Dưới Trái (1 → 13)", range(13, 0, -1), "#0284C7")
+        self.build_quadrant(grid_frame, 1, 1, "📌 Góc Dưới Phải (30 → 39)", range(39, 29, -1), "#D97706")
         
         # Footer buttons
-        btn_bar = tk.Frame(self, bg="#1E293B", padx=15, pady=8)
+        btn_bar = tk.Frame(self, bg="#FFFFFF", padx=15, pady=8, bd=1, relief="solid")
         btn_bar.pack(fill=tk.X)
         
-        tk.Button(btn_bar, text="💾 LƯU & ÁP DỤNG NGAY", font=("Segoe UI", 9, "bold"), bg="#10B981", fg="white", padx=18, pady=6, bd=0, command=self.save_and_apply).pack(side=tk.RIGHT, padx=5)
-        tk.Button(btn_bar, text="✖ Đóng", font=("Segoe UI", 9), bg="#334155", fg="white", padx=14, pady=6, bd=0, command=self.destroy).pack(side=tk.LEFT)
+        tk.Button(btn_bar, text="💾 LƯU VÀ ÁP DỤNG NGAY", font=("Segoe UI", 9, "bold"), bg="#10B981", fg="white", padx=18, pady=6, bd=0, command=self.save_and_apply).pack(side=tk.RIGHT, padx=5)
+        tk.Button(btn_bar, text="✖ Đóng", font=("Segoe UI", 9), bg="#475569", fg="white", padx=14, pady=6, bd=0, command=self.destroy).pack(side=tk.LEFT)
         
     def build_quadrant(self, parent, row, col, title, feeder_range, border_color):
-        frame = tk.LabelFrame(parent, text=f"  {title}  ", font=("Segoe UI", 9, "bold"), fg=border_color, bg="#1E293B", bd=2, relief="groove", padx=6, pady=4)
+        frame = tk.LabelFrame(parent, text=f"  {title}  ", font=("Segoe UI", 9, "bold"), fg=border_color, bg="#FFFFFF", bd=1, relief="solid", padx=6, pady=4)
         frame.grid(row=row, column=col, sticky="nsew", padx=4, pady=2)
         
         for f_no in feeder_range:
             f_str = str(f_no)
             cur = self.app.feeder_matrix.get(f_str, {"comment": "", "footprint": "0603", "head": 0, "speed": 100})
             
-            r = tk.Frame(frame, bg="#1E293B", pady=1)
+            r = tk.Frame(frame, bg="#FFFFFF", pady=1)
             r.pack(fill=tk.X)
             
-            lbl_no = tk.Label(r, text=f"#{f_no:02d}:", width=5, font=("Segoe UI", 8, "bold"), fg="#94A3B8", bg="#1E293B", anchor=tk.E)
+            lbl_no = tk.Label(r, text=f"#{f_no:02d}:", width=5, font=("Segoe UI", 8, "bold"), fg="#475569", bg="#FFFFFF", anchor=tk.E)
             lbl_no.pack(side=tk.LEFT, padx=(2, 4))
             
-            e_cmt = tk.Entry(r, font=("Segoe UI", 8), bg="#0F172A", fg="#38BDF8", insertbackground="white", bd=1, relief="solid")
+            e_cmt = tk.Entry(r, font=("Segoe UI", 8), bg="#FFFFFF", fg="#0F172A", insertbackground="black", bd=1, relief="solid")
             e_cmt.insert(0, cur.get("comment", "") if isinstance(cur, dict) else str(cur))
             e_cmt.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
             
