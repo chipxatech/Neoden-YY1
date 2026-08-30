@@ -822,11 +822,13 @@ static std::map<int, std::wstring> getDialogFeedersCpp(HWND hWnd) {
 
 static HBRUSH g_hBrushDarkDlg = CreateSolidBrush(RGB(15, 23, 42)); // #0F172A
 static HBRUSH g_hBrushEditDark = CreateSolidBrush(RGB(15, 23, 42)); // #0F172A
+static HWND g_hLblActiveProfile = NULL;
 
 void refreshActiveProfileLabelCpp() {
-    if (g_hWnd) {
-        RECT rc = {1040, 0, 1360, 72};
-        InvalidateRect(g_hWnd, &rc, TRUE);
+    if (g_hLblActiveProfile) {
+        std::wstring profVal = g_active_profile.empty() ? L"Mac_Dinh" : g_active_profile;
+        std::wstring text = L"⚙️ Quy tắc đang áp dụng: [" + profVal + L"]";
+        SetWindowTextW(g_hLblActiveProfile, text.c_str());
     }
 }
 
@@ -1251,9 +1253,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
         g_hWnd = hWnd;
 
-        // Nút Mở Ma Trận Feeder 4 Góc trên Header
-        HWND hBtnFeeder = CreateWindowExW(0, L"BUTTON", L"⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1060, 10, 280, 32, hWnd, (HMENU)301, g_hInst, NULL);
+        // Nút Mở Ma Trận Feeder 4 Góc & Nhãn Profile Nằm Ngay Dưới Nút
+        HWND hBtnFeeder = CreateWindowExW(0, L"BUTTON", L"⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1050, 8, 290, 32, hWnd, (HMENU)301, g_hInst, NULL);
         SendMessageW(hBtnFeeder, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+        std::wstring initProfText = L"⚙️ Quy tắc đang áp dụng: [" + (g_active_profile.empty() ? L"Mac_Dinh" : g_active_profile) + L"]";
+        g_hLblActiveProfile = CreateWindowExW(0, L"STATIC", initProfText.c_str(), WS_CHILD | WS_VISIBLE | SS_CENTER, 1050, 42, 290, 22, hWnd, (HMENU)404, g_hInst, NULL);
+        SendMessageW(g_hLblActiveProfile, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" 1. File Altium Pick & Place Dau Vao ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 75, 1320, 70, hWnd, NULL, g_hInst, NULL);
         SendMessageW(hGrp1, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
@@ -1326,6 +1332,33 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     }
 
+    case WM_SIZE: {
+        int width = LOWORD(lParam);
+        if (width > 0) {
+            int rightX = width - 310;
+            if (rightX < 850) rightX = 850;
+            HWND hBtn = GetDlgItem(hWnd, 301);
+            if (hBtn) {
+                SetWindowPos(hBtn, NULL, rightX, 8, 290, 32, SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            if (g_hLblActiveProfile) {
+                SetWindowPos(g_hLblActiveProfile, NULL, rightX, 42, 290, 22, SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+        break;
+    }
+
+    case WM_CTLCOLORSTATIC: {
+        HDC hdcStatic = (HDC)wParam;
+        HWND hwndStatic = (HWND)lParam;
+        if (hwndStatic == g_hLblActiveProfile) {
+            SetTextColor(hdcStatic, RGB(2, 132, 199)); // #0284C7
+            SetBkMode(hdcStatic, TRANSPARENT);
+            return (LRESULT)GetStockObject(NULL_BRUSH);
+        }
+        break;
+    }
+
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
@@ -1349,15 +1382,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         SelectObject(hdc, g_hFontNormal);
         SetTextColor(hdc, RGB(90, 100, 120));
         TextOutW(hdc, 90, 52, L"Tự động 13 cột • Ma trận Feeder 4 góc (1..13, 14..24, 30..39, 40..50) • Chỉnh sửa & Lưu trực tiếp", 97);
-
-        // Vẽ Nhãn Quy Tắc Feeder Đang Áp Dụng nằm trực tiếp bên dưới nút Feeder
-        std::wstring profVal = g_active_profile.empty() ? L"Mac_Dinh" : g_active_profile;
-        std::wstring profStr = L"⚙️ Quy tắc đang áp dụng: [" + profVal + L"]";
-
-        SelectObject(hdc, g_hFontBold);
-        SetTextColor(hdc, RGB(2, 132, 199));
-        RECT rcProf = {1060, 44, 1340, 68};
-        DrawTextW(hdc, profStr.c_str(), -1, &rcProf, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
         EndPaint(hWnd, &ps);
         break;

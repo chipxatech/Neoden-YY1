@@ -648,11 +648,13 @@ static void populate_profile_combobox_c(HWND hCb) {
 
 static HBRUSH g_hBrushDarkDlg_c = NULL;
 static HBRUSH g_hBrushEditDark_c = NULL;
+static HWND g_hLblActiveProfile_c = NULL;
 
 static void refresh_active_profile_label_c(void) {
-    if (g_hWnd) {
-        RECT rc = {1040, 0, 1360, 72};
-        InvalidateRect(g_hWnd, &rc, TRUE);
+    if (g_hLblActiveProfile_c) {
+        wchar_t buf[128];
+        swprintf(buf, 128, L"⚙️ Quy tắc đang áp dụng: [%ls]", g_active_profile_c[0] ? g_active_profile_c : L"Mac_Dinh");
+        SetWindowTextW(g_hLblActiveProfile_c, buf);
     }
 }
 
@@ -938,8 +940,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         g_hFontNormal = CreateFontW(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         g_hWnd = hWnd;
 
-        HWND hBtnFeeder = CreateWindowExW(0, L"BUTTON", L"⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1060, 10, 280, 32, hWnd, (HMENU)301, g_hInst, NULL);
+        // Nút Mở Ma Trận Feeder 4 Góc & Nhãn Profile Nằm Ngay Dưới Nút
+        HWND hBtnFeeder = CreateWindowExW(0, L"BUTTON", L"⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1050, 8, 290, 32, hWnd, (HMENU)301, g_hInst, NULL);
         SendMessageW(hBtnFeeder, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+        wchar_t initProfText[128];
+        swprintf(initProfText, 128, L"⚙️ Quy tắc đang áp dụng: [%ls]", g_active_profile_c[0] ? g_active_profile_c : L"Mac_Dinh");
+        g_hLblActiveProfile_c = CreateWindowExW(0, L"STATIC", initProfText, WS_CHILD | WS_VISIBLE | SS_CENTER, 1050, 42, 290, 22, hWnd, (HMENU)404, g_hInst, NULL);
+        SendMessageW(g_hLblActiveProfile_c, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" 1. File Altium Pick & Place Dau Vao ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 75, 1320, 70, hWnd, NULL, g_hInst, NULL);
         SendMessageW(hGrp1, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
@@ -1011,6 +1019,33 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     }
 
+    case WM_SIZE: {
+        int width = LOWORD(lParam);
+        if (width > 0) {
+            int rightX = width - 310;
+            if (rightX < 850) rightX = 850;
+            HWND hBtn = GetDlgItem(hWnd, 301);
+            if (hBtn) {
+                SetWindowPos(hBtn, NULL, rightX, 8, 290, 32, SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            if (g_hLblActiveProfile_c) {
+                SetWindowPos(g_hLblActiveProfile_c, NULL, rightX, 42, 290, 22, SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+        break;
+    }
+
+    case WM_CTLCOLORSTATIC: {
+        HDC hdcStatic = (HDC)wParam;
+        HWND hwndStatic = (HWND)lParam;
+        if (hwndStatic == g_hLblActiveProfile_c) {
+            SetTextColor(hdcStatic, RGB(2, 132, 199)); // #0284C7
+            SetBkMode(hdcStatic, TRANSPARENT);
+            return (LRESULT)GetStockObject(NULL_BRUSH);
+        }
+        break;
+    }
+
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
@@ -1035,14 +1070,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         SelectObject(hdc, g_hFontNormal);
         SetTextColor(hdc, RGB(90, 100, 120));
         TextOutW(hdc, 90, 52, L"Tự động 13 cột • Ma trận Feeder 4 góc (1..13, 14..24, 30..39, 40..50) • Chỉnh sửa & Lưu trực tiếp", 97);
-
-        // Vẽ Nhãn Quy Tắc Feeder Đang Áp Dụng nằm trực tiếp bên dưới nút Feeder
-        SelectObject(hdc, g_hFontBold);
-        SetTextColor(hdc, RGB(2, 132, 199));
-        wchar_t profBuf[128];
-        swprintf(profBuf, 128, L"⚙️ Quy tắc đang áp dụng: [%ls]", g_active_profile_c[0] ? g_active_profile_c : L"Mac_Dinh");
-        RECT rcProf = {1060, 44, 1340, 68};
-        DrawTextW(hdc, profBuf, -1, &rcProf, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
         EndPaint(hWnd, &ps);
         break;

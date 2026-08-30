@@ -341,6 +341,7 @@ unsafe extern "system" {
     fn GetDlgCtrlID(hWnd: HWND) -> i32;
     fn SetBkColor(hdc: HDC, color: u32) -> u32;
     fn RoundRect(hdc: HDC, left: i32, top: i32, right: i32, bottom: i32, width: i32, height: i32) -> i32;
+    fn SetWindowPos(hWnd: HWND, hWndInsertAfter: HWND, X: i32, Y: i32, cx: i32, cy: i32, uFlags: u32) -> i32;
     fn EnableWindow(hWnd: HWND, bEnable: i32) -> i32;
     fn IsWindow(hWnd: HWND) -> i32;
     fn IsDialogMessageW(hDlg: HWND, lpMsg: *mut MSG) -> i32;
@@ -351,17 +352,15 @@ static mut G_BRUSH_DARK_DLG_RUST: HBRUSH = ptr::null_mut();
 static mut G_BRUSH_EDIT_DARK_RUST: HBRUSH = ptr::null_mut();
 
 unsafe fn refresh_active_profile_label_rust() {
-    let hwnd = {
+    let (h_lbl, act_name) = {
         let state = STATE.lock().unwrap();
-        state.hwnd
+        let act = ACTIVE_PROFILE_RUST.lock().unwrap();
+        (state.h_lbl_active_profile, act.clone())
     };
-    if !hwnd.is_null() {
-        let mut rc: RECT = std::mem::zeroed();
-        rc.left = 1040;
-        rc.top = 0;
-        rc.right = 1360;
-        rc.bottom = 72;
-        InvalidateRect(hwnd, &rc, 1);
+    if !h_lbl.is_null() {
+        let prof_name = if act_name.is_empty() { "Mac_Dinh" } else { &act_name };
+        let text = format!("⚙️ Quy tắc đang áp dụng: [{}]", prof_name);
+        SetWindowTextW(h_lbl, to_wstr(&text).as_ptr());
     }
 }
 
@@ -1574,6 +1573,34 @@ unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
 // Main Window Procedure
 unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize {
     match msg {
+        0x0005 => { // WM_SIZE
+            let width = (lparam & 0xFFFF) as i32;
+            if width > 0 {
+                let right_x = if width - 310 < 850 { 850 } else { width - 310 };
+                let h_btn = unsafe { GetDlgItem(hwnd, 301) };
+                if !h_btn.is_null() {
+                    unsafe { SetWindowPos(h_btn, ptr::null_mut(), right_x, 8, 290, 32, 0x0004 | 0x0010); }
+                }
+                let h_lbl = { STATE.lock().unwrap().h_lbl_active_profile };
+                if !h_lbl.is_null() {
+                    unsafe { SetWindowPos(h_lbl, ptr::null_mut(), right_x, 42, 290, 22, 0x0004 | 0x0010); }
+                }
+            }
+            0
+        }
+        0x0138 => { // WM_CTLCOLORSTATIC
+            let hdc = wparam as HDC;
+            let hwnd_ctl = lparam as HWND;
+            let h_lbl = { STATE.lock().unwrap().h_lbl_active_profile };
+            if hwnd_ctl == h_lbl {
+                unsafe {
+                    SetTextColor(hdc, 0x00C78402); // #0284C7
+                    SetBkMode(hdc, 1); // TRANSPARENT
+                    return GetStockObject(5) as isize; // NULL_BRUSH
+                }
+            }
+            unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+        }
         0x000F => { // WM_PAINT
             let mut ps: PAINTSTRUCT = std::mem::zeroed();
             let hdc = BeginPaint(hwnd, &mut ps);
@@ -1606,18 +1633,6 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
             SetTextColor(hdc, 0x0078645A);
             let sub = to_wstr("Tự động 13 cột • Ma trận Feeder 4 góc (1..13, 14..24, 30..39, 40..50) • Chỉnh sửa & Lưu trực tiếp");
             TextOutW(hdc, 90, 52, sub.as_ptr(), (sub.len() - 1) as i32);
-
-            // ----------------------------------------------------
-            // Vẽ Nhãn Quy Tắc Feeder Đang Áp Dụng nằm trực tiếp bên dưới nút Feeder
-            // ----------------------------------------------------
-            let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
-            let prof_name = if act_name.is_empty() { "Mac_Dinh" } else { &act_name };
-
-            SelectObject(hdc, f_author);
-            SetTextColor(hdc, 0x00C78402); // Vibrant Blue #0284C7 in BGR
-            let prof_str = to_wstr(&format!("⚙️ Quy tắc đang áp dụng: [{}]", prof_name));
-            let mut rc_prof = RECT { left: 1060, top: 44, right: 1340, bottom: 68 };
-            DrawTextW(hdc, prof_str.as_ptr(), -1, &mut rc_prof, 0x00000001 | 0x00000004 | 0x00000020 /* DT_CENTER | DT_VCENTER | DT_SINGLELINE */);
 
             EndPaint(hwnd, &ps);
             0
@@ -1916,8 +1931,14 @@ fn main() {
             let font_normal = CreateFontW(15, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
             let font_bold = CreateFontW(15, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
 
-            let btn_feeder = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC").as_ptr(), 0x50000000, 1060, 10, 280, 32, hwnd, 301 as *mut _, hinst, ptr::null_mut());
+            let btn_feeder = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC").as_ptr(), 0x50000000, 1050, 8, 290, 32, hwnd, 301 as *mut _, hinst, ptr::null_mut());
             SendMessageW(btn_feeder, 0x0030, font_bold as usize, 1);
+
+            let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
+            let prof_name = if act_name.is_empty() { "Mac_Dinh" } else { &act_name };
+            let prof_text = format!("⚙️ Quy tắc đang áp dụng: [{}]", prof_name);
+            state.h_lbl_active_profile = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr(&prof_text).as_ptr(), 0x50000001 /* SS_CENTER */, 1050, 42, 290, 22, hwnd, 404 as *mut _, hinst, ptr::null_mut());
+            SendMessageW(state.h_lbl_active_profile, 0x0030, font_bold as usize, 1);
 
             let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 1. File Altium Pick & Place Đầu Vào ").as_ptr(), 0x50000007, 20, 75, 1320, 70, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
             SendMessageW(grp1, 0x0030, font_bold as usize, 1);
