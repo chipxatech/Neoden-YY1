@@ -1097,13 +1097,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             if (is_top == g_showing_top) {
                                 if ((int)match_idx == item) {
                                     if (c->skip != 0) {
-                                        // BẬT (1): Khối Màu Đỏ Nổi Bật, Chữ Trắng
+                                        // BẬT SKIP (1): Khối Màu Đỏ Nổi Bật, Chữ Trắng (Bỏ Qua)
                                         lplvcd->clrTextBk = RGB(220, 38, 38);
                                         lplvcd->clrText = RGB(255, 255, 255);
                                     } else {
-                                        // TẮT (0): Khối Màu Đen, Chữ Sáng
-                                        lplvcd->clrTextBk = RGB(20, 24, 34);
-                                        lplvcd->clrText = RGB(226, 232, 240);
+                                        // MẶC ĐỊNH (0): Khối Màu Xanh Lá Cây Đẹp (Gắp Linh Kiện)
+                                        lplvcd->clrTextBk = RGB(22, 163, 74); // #16A34A (Màu Xanh Lá Cây)
+                                        lplvcd->clrText = RGB(255, 255, 255);
                                     }
                                     break;
                                 }

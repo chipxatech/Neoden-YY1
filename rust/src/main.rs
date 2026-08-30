@@ -1664,16 +1664,16 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                                     (state.showing_top, state.top_components.len(), state.bot_components.len(), is_skip)
                                 };
                                 if is_skip {
-                                    // BẬT (1): Khối Màu Đỏ Nổi Bật, Chữ Trắng
+                                    // BẬT SKIP (1): Khối Màu Đỏ Nổi Bật, Chữ Trắng (Bỏ Qua)
                                     unsafe {
                                         (*pcustom).clr_text_bk = 0x002626DC; // BGR for RGB(220, 38, 38)
                                         (*pcustom).clr_text = 0x00FFFFFF;
                                     }
                                 } else {
-                                    // TẮT (0): Khối Màu Đen, Chữ Sáng
+                                    // MẶC ĐỊNH (0): Khối Màu Xanh Lá Cây Đẹp (Gắp Linh Kiện)
                                     unsafe {
-                                        (*pcustom).clr_text_bk = 0x00221814; // BGR for RGB(20, 24, 34)
-                                        (*pcustom).clr_text = 0x00F0E8E2;
+                                        (*pcustom).clr_text_bk = 0x004AA316; // BGR for RGB(22, 163, 74)
+                                        (*pcustom).clr_text = 0x00FFFFFF;
                                     }
                                 }
                             }
