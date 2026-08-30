@@ -101,7 +101,7 @@ static void refresh_list_view(void) {
         swprintf(buf, 64, L"%.2f", c->pick_height); ListView_SetItemText(g_hListView, (int)shown_count, 10, buf);
         swprintf(buf, 64, L"%.2f", c->place_height); ListView_SetItemText(g_hListView, (int)shown_count, 11, buf);
         swprintf(buf, 64, L"%d", c->mode); ListView_SetItemText(g_hListView, (int)shown_count, 12, buf);
-        ListView_SetItemText(g_hListView, (int)shown_count, 13, (LPWSTR)(c->skip ? L"● BẬT" : L"○ TẮT"));
+        ListView_SetItemText(g_hListView, (int)shown_count, 13, (LPWSTR)L"");
 
         shown_count++;
     }
@@ -406,13 +406,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             if (is_top == g_showing_top) {
                                 if ((int)match_idx == item) {
                                     if (c->skip != 0) {
-                                        // BẬT: Nút Màu Xanh Lá Cây
+                                        // BẬT: Khối Màu Xanh Lá Cây
                                         lplvcd->clrTextBk = RGB(34, 197, 94);
-                                        lplvcd->clrText = RGB(255, 255, 255);
+                                        lplvcd->clrText = RGB(34, 197, 94);
                                     } else {
-                                        // TẮT: Nút Màu Đen
-                                        lplvcd->clrTextBk = RGB(30, 41, 59);
-                                        lplvcd->clrText = RGB(226, 232, 240);
+                                        // TẮT: Khối Màu Đen
+                                        lplvcd->clrTextBk = RGB(20, 24, 34);
+                                        lplvcd->clrText = RGB(20, 24, 34);
                                     }
                                     break;
                                 }

@@ -383,7 +383,7 @@ fn refresh_list_view() {
             set_sub(10, &format!("{:.2}", c.pick_height));
             set_sub(11, &format!("{:.2}", c.place_height));
             set_sub(12, &format!("{}", c.mode));
-            set_sub(13, if c.skip != 0 { "● BẬT" } else { "○ TẮT" });
+            set_sub(13, "");
         }
 
         let status_txt = format!(
@@ -807,14 +807,16 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                                     (state.showing_top, state.top_components.len(), state.bot_components.len(), is_skip)
                                 };
                                 if is_skip {
+                                    // BẬT: Khối Màu Xanh Lá Cây
                                     unsafe {
-                                        (*pcustom).clr_text_bk = 0x005EC522;
-                                        (*pcustom).clr_text = 0x00FFFFFF;
+                                        (*pcustom).clr_text_bk = 0x005EC522; // BGR for RGB(34, 197, 94)
+                                        (*pcustom).clr_text = 0x005EC522;
                                     }
                                 } else {
+                                    // TẮT: Khối Màu Đen
                                     unsafe {
-                                        (*pcustom).clr_text_bk = 0x003B291E;
-                                        (*pcustom).clr_text = 0x00F0E8E2;
+                                        (*pcustom).clr_text_bk = 0x00221814; // BGR for RGB(20, 24, 34)
+                                        (*pcustom).clr_text = 0x00221814;
                                     }
                                 }
                             }

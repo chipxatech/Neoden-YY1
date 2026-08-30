@@ -867,7 +867,7 @@ class NeoDenYY1App:
         self.tree_top.delete(*self.tree_top.get_children())
         for idx, c in enumerate(self.top_components):
             is_skip = (c.get("skip", 0) == 1)
-            skip_text = "● BẬT" if is_skip else "○ TẮT"
+            skip_text = "■"
             tag = "skip_on" if is_skip else "skip_off"
             self.tree_top.insert("", tk.END, iid=f"top_{idx}", values=(
                 idx + 1, c["designator"], c["comment"], c["footprint"],
@@ -881,7 +881,7 @@ class NeoDenYY1App:
         self.tree_bot.delete(*self.tree_bot.get_children())
         for idx, c in enumerate(self.bot_components):
             is_skip = (c.get("skip", 0) == 1)
-            skip_text = "● BẬT" if is_skip else "○ TẮT"
+            skip_text = "■"
             tag = "skip_on" if is_skip else "skip_off"
             self.tree_bot.insert("", tk.END, iid=f"bot_{idx}", values=(
                 idx + 1, c["designator"], c["comment"], c["footprint"],
@@ -891,10 +891,10 @@ class NeoDenYY1App:
                 c["mode"], skip_text
             ), tags=(tag,))
             
-        self.tree_top.tag_configure("skip_on", foreground="#22C55E")
-        self.tree_top.tag_configure("skip_off", foreground="#94A3B8")
-        self.tree_bot.tag_configure("skip_on", foreground="#22C55E")
-        self.tree_bot.tag_configure("skip_off", foreground="#94A3B8")
+        self.tree_top.tag_configure("skip_on", foreground="#22C55E", font=("Segoe UI", 11, "bold"))
+        self.tree_top.tag_configure("skip_off", foreground="#1E293B", font=("Segoe UI", 11, "bold"))
+        self.tree_bot.tag_configure("skip_on", foreground="#22C55E", font=("Segoe UI", 11, "bold"))
+        self.tree_bot.tag_configure("skip_off", foreground="#1E293B", font=("Segoe UI", 11, "bold"))
         
         self.notebook.tab(0, text=f"  Mặt TOP ({len(self.top_components)} linh kiện)  ")
         self.notebook.tab(1, text=f"  Mặt BOTTOM ({len(self.bot_components)} linh kiện)  ")
