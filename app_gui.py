@@ -610,7 +610,7 @@ class NeoDenYY1App:
         self.auto_match_var = tk.BooleanVar(value=True)
         chk_match = ttk.Checkbutton(
             tb_bar,
-            text="☑ Tự động nhận diện Feeder theo Cấu hình",
+            text="Tự động nhận diện Feeder theo Cấu hình",
             variable=self.auto_match_var,
             command=self.on_auto_match_toggled
         )

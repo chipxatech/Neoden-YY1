@@ -2086,7 +2086,7 @@ fn main() {
             state.h_radio_bot = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt BOTTOM").as_ptr(), 0x50000009, 135, 180, 110, 24, hwnd, 402 as *mut _, hinst, ptr::null_mut());
             SendMessageW(state.h_radio_bot, 0x0030, font_bold as usize, 1);
 
-            state.h_chk_auto_match = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("☑ Tự động nhận diện Feeder theo Cấu hình").as_ptr(), 0x50000003 /* BS_AUTOCHECKBOX */, 255, 180, 310, 24, hwnd, 302 as *mut _, hinst, ptr::null_mut());
+            state.h_chk_auto_match = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Tự động nhận diện Feeder theo Cấu hình").as_ptr(), 0x50000003 /* BS_AUTOCHECKBOX */, 255, 180, 310, 24, hwnd, 302 as *mut _, hinst, ptr::null_mut());
             SendMessageW(state.h_chk_auto_match, 0x0030, font_bold as usize, 1);
             SendMessageW(state.h_chk_auto_match, 0x00F1 /* BM_SETCHECK */, 1, 0);
 

@@ -1069,7 +1069,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         SendMessageW(g_hRadioBot, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         // Checkbox Tự động nhận diện Feeder
-        g_hChkAutoMatch_c = CreateWindowExW(0, L"BUTTON", L"☑ Tự động nhận diện Feeder theo Cấu hình", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 255, 180, 310, 24, hWnd, (HMENU)302, g_hInst, NULL);
+        g_hChkAutoMatch_c = CreateWindowExW(0, L"BUTTON", L"Tự động nhận diện Feeder theo Cấu hình", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 255, 180, 310, 24, hWnd, (HMENU)302, g_hInst, NULL);
         SendMessageW(g_hChkAutoMatch_c, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
         SendMessageW(g_hChkAutoMatch_c, BM_SETCHECK, g_auto_match_feeder_c ? BST_CHECKED : BST_UNCHECKED, 0);
 
