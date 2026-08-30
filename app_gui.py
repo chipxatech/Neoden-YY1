@@ -141,7 +141,7 @@ class FeederMatrixDialog(tk.Toplevel):
         self.profiles_dir = os.path.join(self.app.base_dir, "feeder_profiles")
         os.makedirs(self.profiles_dir, exist_ok=True)
         
-        self.profile_var = tk.StringVar(value="Mac_Dinh")
+        self.profile_var = tk.StringVar(value=self.app.active_profile if self.app.active_profile else "Mac_Dinh")
         self.entries = {}
         self.setup_ui()
         self.load_profile_list()
@@ -223,9 +223,10 @@ class FeederMatrixDialog(tk.Toplevel):
         profiles.insert(0, "Mac_Dinh")
         
         self.cb_profile["values"] = profiles
+        cur_prof = self.app.active_profile if getattr(self.app, "active_profile", None) else "Mac_Dinh"
         if self.profile_var.get() not in profiles:
-            self.profile_var.set("Mac_Dinh")
-            self.on_profile_selected()
+            self.profile_var.set(cur_prof if cur_prof in profiles else "Mac_Dinh")
+        self.on_profile_selected()
             
     def on_profile_selected(self, event=None):
         prof_name = self.profile_var.get().strip()

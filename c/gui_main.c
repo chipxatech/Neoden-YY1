@@ -650,11 +650,15 @@ static HBRUSH g_hBrushDarkDlg_c = NULL;
 static HBRUSH g_hBrushEditDark_c = NULL;
 static HWND g_hLblActiveProfile_c = NULL;
 
+static wchar_t g_dialog_profile_c[64] = L"Mac_Dinh";
+
 static void refresh_active_profile_label_c(void) {
     if (g_hLblActiveProfile_c) {
         wchar_t buf[128];
         swprintf(buf, 128, L"⚙️ Quy tắc đang áp dụng: [%ls]", g_active_profile_c[0] ? g_active_profile_c : L"Mac_Dinh");
         SetWindowTextW(g_hLblActiveProfile_c, buf);
+        InvalidateRect(g_hLblActiveProfile_c, NULL, TRUE);
+        UpdateWindow(g_hLblActiveProfile_c);
     }
 }
 
@@ -703,8 +707,8 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
             HWND hCb = GetDlgItem(hWnd, 3001);
             int idx = (int)SendMessageW(hCb, CB_GETCURSEL, 0, 0);
             if (idx != CB_ERR) {
-                SendMessageW(hCb, CB_GETLBTEXT, idx, (LPARAM)g_active_profile_c);
-                load_profile_from_disk_c(g_active_profile_c);
+                SendMessageW(hCb, CB_GETLBTEXT, idx, (LPARAM)g_dialog_profile_c);
+                load_profile_from_disk_c(g_dialog_profile_c);
                 for (int slot = 1; slot <= 50; ++slot) {
                     HWND hEd = GetDlgItem(hWnd, 5000 + slot);
                     if (hEd) {
@@ -713,7 +717,6 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
                         SetWindowTextW(hEd, wVal);
                     }
                 }
-                refresh_active_profile_label_c();
             }
         } else if (wmId == 3002) { // + Tạo Mới
             wchar_t newName[64] = {0};
@@ -726,12 +729,11 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
                         WideCharToMultiByte(CP_UTF8, 0, buf, -1, g_feeder_matrix_c[slot].comment, sizeof(g_feeder_matrix_c[slot].comment), NULL, NULL);
                     }
                 }
-                wcscpy(g_active_profile_c, newName);
-                save_profile_to_disk_c(g_active_profile_c);
+                wcscpy(g_dialog_profile_c, newName);
+                save_profile_to_disk_c(g_dialog_profile_c);
                 HWND hCb = GetDlgItem(hWnd, 3001);
                 populate_profile_combobox_c(hCb);
-                refresh_active_profile_label_c();
-                MessageBoxW(hWnd, L"🎉 Đã tạo cấu hình mới thành công!", L"Thành Công", MB_ICONINFORMATION);
+                MessageBoxW(hWnd, L"🎉 Đã tạo cấu hình mới thành công! Nhấn 'LƯU VÀ ÁP DỤNG NGAY' nếu muốn áp dụng cho mạch.", L"Thành Công", MB_ICONINFORMATION);
             }
         } else if (wmId == 3003) { // Lưu
             for (int slot = 1; slot <= 50; ++slot) {
@@ -742,8 +744,7 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
                     WideCharToMultiByte(CP_UTF8, 0, buf, -1, g_feeder_matrix_c[slot].comment, sizeof(g_feeder_matrix_c[slot].comment), NULL, NULL);
                 }
             }
-            save_profile_to_disk_c(g_active_profile_c);
-            refresh_active_profile_label_c();
+            save_profile_to_disk_c(g_dialog_profile_c);
             MessageBoxW(hWnd, L"💾 Đã lưu cấu hình hiện tại thành công!", L"Thành Công", MB_ICONINFORMATION);
         } else if (wmId == 3004) { // Lưu Thành...
             wchar_t newName[64] = {0};
@@ -756,15 +757,14 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
                         WideCharToMultiByte(CP_UTF8, 0, buf, -1, g_feeder_matrix_c[slot].comment, sizeof(g_feeder_matrix_c[slot].comment), NULL, NULL);
                     }
                 }
-                wcscpy(g_active_profile_c, newName);
-                save_profile_to_disk_c(g_active_profile_c);
+                wcscpy(g_dialog_profile_c, newName);
+                save_profile_to_disk_c(g_dialog_profile_c);
                 HWND hCb = GetDlgItem(hWnd, 3001);
                 populate_profile_combobox_c(hCb);
-                refresh_active_profile_label_c();
                 MessageBoxW(hWnd, L"🎉 Đã lưu thành cấu hình mới!", L"Thành Công", MB_ICONINFORMATION);
             }
         } else if (wmId == 3005) { // Xóa
-            if (wcscmp(g_active_profile_c, L"Mac_Dinh") == 0 || wcscmp(g_active_profile_c, L"Mặc Định") == 0 || g_active_profile_c[0] == L'\0') {
+            if (wcscmp(g_dialog_profile_c, L"Mac_Dinh") == 0 || wcscmp(g_dialog_profile_c, L"Mặc Định") == 0 || g_dialog_profile_c[0] == L'\0') {
                 MessageBoxW(hWnd, L"Cấu hình mặc định [Mac_Dinh] là cấu hình gốc của máy và không thể xóa!", L"Thông Báo", MB_ICONWARNING);
                 break;
             }
@@ -772,12 +772,12 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
                 wchar_t pDir[MAX_PATH];
                 get_profiles_directory_c(pDir, MAX_PATH);
                 wchar_t path[MAX_PATH];
-                swprintf(path, MAX_PATH, L"%ls\\%ls.json", pDir, g_active_profile_c);
+                swprintf(path, MAX_PATH, L"%ls\\%ls.json", pDir, g_dialog_profile_c);
                 DeleteFileW(path);
-                wcscpy(g_active_profile_c, L"Mac_Dinh");
+                wcscpy(g_dialog_profile_c, L"Mac_Dinh");
                 HWND hCb = GetDlgItem(hWnd, 3001);
                 populate_profile_combobox_c(hCb);
-                load_profile_from_disk_c(g_active_profile_c);
+                load_profile_from_disk_c(g_dialog_profile_c);
                 for (int slot = 1; slot <= 50; ++slot) {
                     HWND hEd = GetDlgItem(hWnd, 5000 + slot);
                     if (hEd) {
@@ -786,10 +786,10 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
                         SetWindowTextW(hEd, wVal);
                     }
                 }
-                refresh_active_profile_label_c();
-                MessageBoxW(hWnd, L"Đã xóa cấu hình! Đã tự động chuyển về [Mac_Dinh].", L"Thành Công", MB_ICONINFORMATION);
+                MessageBoxW(hWnd, L"Đã xóa cấu hình! Đã chuyển về xem [Mac_Dinh].", L"Thành Công", MB_ICONINFORMATION);
             }
         } else if (wmId == IDOK || wmId == 2001) { // LƯU & ÁP DỤNG
+            wcscpy(g_active_profile_c, g_dialog_profile_c);
             for (int slot = 1; slot <= 50; ++slot) {
                 HWND hEd = GetDlgItem(hWnd, 5000 + slot);
                 if (hEd) {
@@ -822,6 +822,8 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
 }
 
 static void open_feeder_matrix_dialog_c(HWND parent) {
+    wcscpy(g_dialog_profile_c, g_active_profile_c[0] ? g_active_profile_c : L"Mac_Dinh");
+
     RECT pr;
     GetWindowRect(parent, &pr);
     int dlgW = 675, dlgH = 765;
@@ -1037,8 +1039,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         HWND hwndStatic = (HWND)lParam;
         if (hwndStatic == g_hLblActiveProfile_c) {
             SetTextColor(hdcStatic, RGB(2, 132, 199)); // #0284C7
-            SetBkMode(hdcStatic, TRANSPARENT);
-            return (LRESULT)GetStockObject(NULL_BRUSH);
+            SetBkMode(hdcStatic, OPAQUE);
+            SetBkColor(hdcStatic, GetSysColor(COLOR_BTNFACE));
+            return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
         }
         break;
     }

@@ -350,8 +350,7 @@ unsafe extern "system" {
     fn GetSysColorBrush(nIndex: i32) -> HBRUSH;
 }
 
-static mut G_BRUSH_DARK_DLG_RUST: HBRUSH = ptr::null_mut();
-static mut G_BRUSH_EDIT_DARK_RUST: HBRUSH = ptr::null_mut();
+static DIALOG_PROFILE_RUST: Mutex<String> = Mutex::new(String::new());
 
 unsafe fn refresh_active_profile_label_rust() {
     let (h_lbl, act_name) = {
@@ -363,6 +362,8 @@ unsafe fn refresh_active_profile_label_rust() {
         let prof_name = if act_name.is_empty() { "Mac_Dinh" } else { &act_name };
         let text = format!("⚙️ Quy tắc đang áp dụng: [{}]", prof_name);
         SetWindowTextW(h_lbl, to_wstr(&text).as_ptr());
+        InvalidateRect(h_lbl, ptr::null(), 1);
+        UpdateWindow(h_lbl);
     }
 }
 
@@ -1298,8 +1299,8 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                     SendMessageW(h_cb, 0x0148 /* CB_GETLBTEXT */, idx as usize, buf.as_mut_ptr() as isize);
                     let sel_name = from_wstr(buf.as_ptr());
                     {
-                        let mut act = ACTIVE_PROFILE_RUST.lock().unwrap();
-                        *act = sel_name.clone();
+                        let mut dlg_p = DIALOG_PROFILE_RUST.lock().unwrap();
+                        *dlg_p = sel_name.clone();
                     }
                     let fd = load_profile_from_disk_rust(&sel_name);
                     for slot in 1..=50 {
@@ -1309,7 +1310,6 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                             SetWindowTextW(h_ed, to_wstr(val).as_ptr());
                         }
                     }
-                    refresh_active_profile_label_rust();
                 }
             } else if id == 3002 { // + Tạo Mới
                 if let Some(new_name) = show_input_box_rust(hwnd, "Tạo Cấu Hình Mới", "Nhập tên cấu hình mới (VD: Bo_Mach_A):") {
@@ -1324,8 +1324,8 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                     }
                     save_profile_to_disk_rust(&new_name, &map);
                     {
-                        let mut act = ACTIVE_PROFILE_RUST.lock().unwrap();
-                        *act = new_name.clone();
+                        let mut dlg_p = DIALOG_PROFILE_RUST.lock().unwrap();
+                        *dlg_p = new_name.clone();
                     }
                     let h_cb = GetDlgItem(hwnd, 3001);
                     SendMessageW(h_cb, 0x014B /* CB_RESETCONTENT */, 0, 0);
@@ -1336,11 +1336,10 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                         if p == &new_name { sel_idx = i; }
                     }
                     SendMessageW(h_cb, 0x014E /* CB_SETCURSEL */, sel_idx, 0);
-                    refresh_active_profile_label_rust();
-                    MessageBoxW(hwnd, to_wstr("🎉 Đã tạo cấu hình mới thành công!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
+                    MessageBoxW(hwnd, to_wstr("🎉 Đã tạo cấu hình mới thành công! Nhấn 'LƯU VÀ ÁP DỤNG NGAY' nếu muốn áp dụng cho mạch.").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
                 }
             } else if id == 3003 { // Lưu
-                let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
+                let dlg_name = { DIALOG_PROFILE_RUST.lock().unwrap().clone() };
                 let mut map = std::collections::HashMap::new();
                 for slot in 1..=50 {
                     let h_ed = GetDlgItem(hwnd, 5000 + slot);
@@ -1350,9 +1349,8 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                         map.insert(slot, from_wstr(buf.as_ptr()));
                     }
                 }
-                save_profile_to_disk_rust(if act_name.is_empty() { "Mac_Dinh" } else { &act_name }, &map);
-                refresh_active_profile_label_rust();
-                MessageBoxW(hwnd, to_wstr("💾 Đã lưu cấu hình hiện tại thành công!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
+                save_profile_to_disk_rust(if dlg_name.is_empty() { "Mac_Dinh" } else { &dlg_name }, &map);
+                MessageBoxW(hwnd, to_wstr("💾 Đã lưu cấu hình vào bộ nhớ thành công!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
             } else if id == 3004 { // Lưu Thành...
                 if let Some(new_name) = show_input_box_rust(hwnd, "Lưu Thành Cấu Hình Khác", "Nhập tên cấu hình mới:") {
                     let mut map = std::collections::HashMap::new();
@@ -1366,8 +1364,8 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                     }
                     save_profile_to_disk_rust(&new_name, &map);
                     {
-                        let mut act = ACTIVE_PROFILE_RUST.lock().unwrap();
-                        *act = new_name.clone();
+                        let mut dlg_p = DIALOG_PROFILE_RUST.lock().unwrap();
+                        *dlg_p = new_name.clone();
                     }
                     let h_cb = GetDlgItem(hwnd, 3001);
                     SendMessageW(h_cb, 0x014B /* CB_RESETCONTENT */, 0, 0);
@@ -1378,21 +1376,20 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                         if p == &new_name { sel_idx = i; }
                     }
                     SendMessageW(h_cb, 0x014E /* CB_SETCURSEL */, sel_idx, 0);
-                    refresh_active_profile_label_rust();
                     MessageBoxW(hwnd, to_wstr("🎉 Đã lưu thành cấu hình mới!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
                 }
             } else if id == 3005 { // Xóa
-                let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
-                if act_name == "Mac_Dinh" || act_name == "Mặc Định" || act_name.is_empty() {
+                let dlg_name = { DIALOG_PROFILE_RUST.lock().unwrap().clone() };
+                if dlg_name == "Mac_Dinh" || dlg_name == "Mặc Định" || dlg_name.is_empty() {
                     MessageBoxW(hwnd, to_wstr("Cấu hình mặc định [Mac_Dinh] là cấu hình gốc của máy và không thể xóa!").as_ptr(), to_wstr("Thông Báo").as_ptr(), 0x00000030);
                     return 0;
                 }
                 if MessageBoxW(hwnd, to_wstr("Bạn có chắc muốn xóa vĩnh viễn cấu hình này?").as_ptr(), to_wstr("Xác Nhận Xóa").as_ptr(), 0x00000020 | 0x00000004) == 6 {
                     let p_dir = get_profiles_dir_rust();
-                    let _ = std::fs::remove_file(p_dir.join(format!("{}.json", act_name)));
+                    let _ = std::fs::remove_file(p_dir.join(format!("{}.json", dlg_name)));
                     {
-                        let mut act = ACTIVE_PROFILE_RUST.lock().unwrap();
-                        *act = "Mac_Dinh".to_string();
+                        let mut dlg_p = DIALOG_PROFILE_RUST.lock().unwrap();
+                        *dlg_p = "Mac_Dinh".to_string();
                     }
                     let h_cb = GetDlgItem(hwnd, 3001);
                     SendMessageW(h_cb, 0x014B, 0, 0);
@@ -1411,11 +1408,15 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                             SetWindowTextW(h_ed, to_wstr(val).as_ptr());
                         }
                     }
-                    refresh_active_profile_label_rust();
-                    MessageBoxW(hwnd, to_wstr("Đã xóa cấu hình! Đã tự động chuyển về [Mac_Dinh].").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
+                    MessageBoxW(hwnd, to_wstr("Đã xóa cấu hình! Đã chuyển về xem [Mac_Dinh].").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
                 }
             } else if id == 1 || id == 2001 { // LƯU & ÁP DỤNG
-                let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
+                let dlg_name = { DIALOG_PROFILE_RUST.lock().unwrap().clone() };
+                let act_name = if dlg_name.is_empty() { "Mac_Dinh".to_string() } else { dlg_name };
+                {
+                    let mut act = ACTIVE_PROFILE_RUST.lock().unwrap();
+                    *act = act_name.clone();
+                }
                 let mut map = std::collections::HashMap::new();
                 for slot in 1..=50 {
                     let h_ed = GetDlgItem(hwnd, 5000 + slot);
@@ -1425,7 +1426,7 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                         map.insert(slot, from_wstr(buf.as_ptr()));
                     }
                 }
-                save_profile_to_disk_rust(if act_name.is_empty() { "Mac_Dinh" } else { &act_name }, &map);
+                save_profile_to_disk_rust(&act_name, &map);
 
                 {
                     let mut opt = FEEDER_MATRIX_RUST.lock().unwrap();
@@ -1460,6 +1461,12 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
 }
 
 unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
+    {
+        let act = ACTIVE_PROFILE_RUST.lock().unwrap().clone();
+        let mut dlg_p = DIALOG_PROFILE_RUST.lock().unwrap();
+        *dlg_p = if act.is_empty() { "Mac_Dinh".to_string() } else { act };
+    }
+
     let mut pr: RECT = std::mem::zeroed();
     GetWindowRect(parent, &mut pr);
     let dlg_w = 675;
@@ -1588,8 +1595,9 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
             if hwnd_ctl == h_lbl {
                 unsafe {
                     SetTextColor(hdc, 0x00C78402); // #0284C7
-                    SetBkMode(hdc, 1); // TRANSPARENT
-                    return GetStockObject(5) as isize; // NULL_BRUSH
+                    SetBkMode(hdc, 2 /* OPAQUE */);
+                    SetBkColor(hdc, GetSysColor(15 /* COLOR_BTNFACE */));
+                    return GetSysColorBrush(15 /* COLOR_BTNFACE */) as isize;
                 }
             }
             unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }

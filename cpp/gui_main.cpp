@@ -824,11 +824,15 @@ static HBRUSH g_hBrushDarkDlg = CreateSolidBrush(RGB(15, 23, 42)); // #0F172A
 static HBRUSH g_hBrushEditDark = CreateSolidBrush(RGB(15, 23, 42)); // #0F172A
 static HWND g_hLblActiveProfile = NULL;
 
+static std::wstring g_dialog_profile = L"Mac_Dinh";
+
 void refreshActiveProfileLabelCpp() {
     if (g_hLblActiveProfile) {
         std::wstring profVal = g_active_profile.empty() ? L"Mac_Dinh" : g_active_profile;
         std::wstring text = L"⚙️ Quy tắc đang áp dụng: [" + profVal + L"]";
         SetWindowTextW(g_hLblActiveProfile, text.c_str());
+        InvalidateRect(g_hLblActiveProfile, NULL, TRUE);
+        UpdateWindow(g_hLblActiveProfile);
     }
 }
 
@@ -862,24 +866,23 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
         int wmId = LOWORD(wParam);
         int wmEvent = HIWORD(wParam);
 
-        if (wmId == 3001 && wmEvent == CBN_SELCHANGE) { // Chọn profile
+        if (wmId == 3001 && wmEvent == CBN_SELCHANGE) { // Chọn profile để xem/chỉnh sửa trong hộp thoại (chưa áp dụng ra ngoài)
             HWND hCb = GetDlgItem(hWnd, 3001);
             int idx = (int)SendMessageW(hCb, CB_GETCURSEL, 0, 0);
             if (idx != CB_ERR) {
                 wchar_t pName[128] = {0};
                 SendMessageW(hCb, CB_GETLBTEXT, idx, (LPARAM)pName);
-                g_active_profile = pName;
+                g_dialog_profile = pName;
                 std::map<int, std::wstring> fd;
-                loadProfileFromDiskCpp(g_active_profile, fd);
+                loadProfileFromDiskCpp(g_dialog_profile, fd);
                 updateDialogFromMapCpp(hWnd, fd);
-                refreshActiveProfileLabelCpp();
             }
         } else if (wmId == 3002) { // + Tạo Mới Profile
             std::wstring newName;
             if (showInputBoxCpp(hWnd, L"Tạo Cấu Hình Mới", L"Nhập tên cấu hình mới (VD: Bo_Mach_A):", newName)) {
                 auto fd = getDialogFeedersCpp(hWnd);
                 saveProfileToDiskCpp(newName, fd);
-                g_active_profile = newName;
+                g_dialog_profile = newName;
                 
                 HWND hCb = GetDlgItem(hWnd, 3001);
                 SendMessageW(hCb, CB_RESETCONTENT, 0, 0);
@@ -887,23 +890,21 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
                 int selIdx = 0;
                 for (size_t i = 0; i < plist.size(); ++i) {
                     SendMessageW(hCb, CB_ADDSTRING, 0, (LPARAM)plist[i].c_str());
-                    if (plist[i] == g_active_profile) selIdx = (int)i;
+                    if (plist[i] == g_dialog_profile) selIdx = (int)i;
                 }
                 SendMessageW(hCb, CB_SETCURSEL, selIdx, 0);
-                refreshActiveProfileLabelCpp();
-                MessageBoxW(hWnd, (L"🎉 Đã tạo cấu hình mới [" + newName + L"] thành công!").c_str(), L"Thành Công", MB_ICONINFORMATION);
+                MessageBoxW(hWnd, (L"🎉 Đã tạo cấu hình mới [" + newName + L"] thành công! Nhấn 'LƯU VÀ ÁP DỤNG NGAY' nếu muốn áp dụng cho mạch.").c_str(), L"Thành Công", MB_ICONINFORMATION);
             }
         } else if (wmId == 3003) { // Lưu Profile
             auto fd = getDialogFeedersCpp(hWnd);
-            saveProfileToDiskCpp(g_active_profile, fd);
-            refreshActiveProfileLabelCpp();
-            MessageBoxW(hWnd, (L"💾 Đã lưu cấu hình [" + g_active_profile + L"] thành công!").c_str(), L"Thành Công", MB_ICONINFORMATION);
+            saveProfileToDiskCpp(g_dialog_profile, fd);
+            MessageBoxW(hWnd, (L"💾 Đã lưu cấu hình [" + g_dialog_profile + L"] vào bộ nhớ thành công!").c_str(), L"Thành Công", MB_ICONINFORMATION);
         } else if (wmId == 3004) { // Lưu Thành (Save As)
             std::wstring newName;
             if (showInputBoxCpp(hWnd, L"Lưu Thành Cấu Hình Khác", L"Nhập tên cấu hình mới:", newName)) {
                 auto fd = getDialogFeedersCpp(hWnd);
                 saveProfileToDiskCpp(newName, fd);
-                g_active_profile = newName;
+                g_dialog_profile = newName;
                 
                 HWND hCb = GetDlgItem(hWnd, 3001);
                 SendMessageW(hCb, CB_RESETCONTENT, 0, 0);
@@ -911,37 +912,36 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
                 int selIdx = 0;
                 for (size_t i = 0; i < plist.size(); ++i) {
                     SendMessageW(hCb, CB_ADDSTRING, 0, (LPARAM)plist[i].c_str());
-                    if (plist[i] == g_active_profile) selIdx = (int)i;
+                    if (plist[i] == g_dialog_profile) selIdx = (int)i;
                 }
                 SendMessageW(hCb, CB_SETCURSEL, selIdx, 0);
-                refreshActiveProfileLabelCpp();
                 MessageBoxW(hWnd, (L"🎉 Đã lưu thành cấu hình [" + newName + L"] thành công!").c_str(), L"Thành Công", MB_ICONINFORMATION);
             }
         } else if (wmId == 3005) { // Xóa Profile
-            if (g_active_profile == L"Mac_Dinh" || g_active_profile == L"Mặc Định" || g_active_profile.empty()) {
+            if (g_dialog_profile == L"Mac_Dinh" || g_dialog_profile == L"Mặc Định" || g_dialog_profile.empty()) {
                 MessageBoxW(hWnd, L"Cấu hình mặc định [Mac_Dinh] là cấu hình gốc của máy và không thể xóa!", L"Thông Báo", MB_ICONWARNING);
                 break;
             }
-            if (MessageBoxW(hWnd, (L"Bạn có chắc muốn xóa vĩnh viễn cấu hình [" + g_active_profile + L"]?").c_str(), L"Xác Nhận Xóa", MB_ICONQUESTION | MB_YESNO) == IDYES) {
-                std::wstring delPath = getProfilesDirectoryCpp() + L"\\" + g_active_profile + L".json";
+            if (MessageBoxW(hWnd, (L"Bạn có chắc muốn xóa vĩnh viễn cấu hình [" + g_dialog_profile + L"]?").c_str(), L"Xác Nhận Xóa", MB_ICONQUESTION | MB_YESNO) == IDYES) {
+                std::wstring delPath = getProfilesDirectoryCpp() + L"\\" + g_dialog_profile + L".json";
                 DeleteFileW(delPath.c_str());
-                g_active_profile = L"Mac_Dinh";
+                g_dialog_profile = L"Mac_Dinh";
                 HWND hCb = GetDlgItem(hWnd, 3001);
                 SendMessageW(hCb, CB_RESETCONTENT, 0, 0);
                 auto plist = listFeederProfilesCpp();
                 int selIdx = 0;
                 for (size_t i = 0; i < plist.size(); ++i) {
                     SendMessageW(hCb, CB_ADDSTRING, 0, (LPARAM)plist[i].c_str());
-                    if (plist[i] == g_active_profile) selIdx = (int)i;
+                    if (plist[i] == g_dialog_profile) selIdx = (int)i;
                 }
                 SendMessageW(hCb, CB_SETCURSEL, selIdx, 0);
                 std::map<int, std::wstring> fd;
-                loadProfileFromDiskCpp(g_active_profile, fd);
+                loadProfileFromDiskCpp(g_dialog_profile, fd);
                 updateDialogFromMapCpp(hWnd, fd);
-                refreshActiveProfileLabelCpp();
-                MessageBoxW(hWnd, L"Đã xóa cấu hình! Đã tự động chuyển về [Mac_Dinh].", L"Thành Công", MB_ICONINFORMATION);
+                MessageBoxW(hWnd, L"Đã xóa cấu hình! Đã chuyển về xem [Mac_Dinh].", L"Thành Công", MB_ICONINFORMATION);
             }
         } else if (wmId == IDOK || wmId == 2001) { // LƯU & ÁP DỤNG
+            g_active_profile = g_dialog_profile;
             auto fd = getDialogFeedersCpp(hWnd);
             saveProfileToDiskCpp(g_active_profile, fd);
 
@@ -972,6 +972,8 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 }
 
 void openFeederMatrixDialog(HWND parent) {
+    g_dialog_profile = g_active_profile.empty() ? L"Mac_Dinh" : g_active_profile;
+
     RECT pr;
     GetWindowRect(parent, &pr);
     int dlgW = 675, dlgH = 765;
@@ -1353,8 +1355,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         HWND hwndStatic = (HWND)lParam;
         if (hwndStatic == g_hLblActiveProfile) {
             SetTextColor(hdcStatic, RGB(2, 132, 199)); // #0284C7
-            SetBkMode(hdcStatic, TRANSPARENT);
-            return (LRESULT)GetStockObject(NULL_BRUSH);
+            SetBkMode(hdcStatic, OPAQUE);
+            SetBkColor(hdcStatic, GetSysColor(COLOR_BTNFACE));
+            return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
         }
         break;
     }
