@@ -101,7 +101,7 @@ static void refresh_list_view(void) {
         swprintf(buf, 64, L"%.2f", c->pick_height); ListView_SetItemText(g_hListView, (int)shown_count, 10, buf);
         swprintf(buf, 64, L"%.2f", c->place_height); ListView_SetItemText(g_hListView, (int)shown_count, 11, buf);
         swprintf(buf, 64, L"%d", c->mode); ListView_SetItemText(g_hListView, (int)shown_count, 12, buf);
-        swprintf(buf, 64, L"%d", c->skip); ListView_SetItemText(g_hListView, (int)shown_count, 13, buf);
+        ListView_SetItemText(g_hListView, (int)shown_count, 13, (LPWSTR)(c->skip ? L"● BẬT" : L"○ TẮT"));
 
         shown_count++;
     }
@@ -303,10 +303,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 145, 180, 120, 24, hWnd, (HMENU)402, g_hInst, NULL);
         SendMessageW(g_hRadioBot, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        HWND hBtnSkip = CreateWindowExW(0, L"BUTTON", L"Bat/Tat Skip", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1180, 178, 120, 26, hWnd, (HMENU)404, g_hInst, NULL);
-        SendMessageW(hBtnSkip, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
-
-        g_hStatus = CreateWindowExW(0, L"STATIC", L"Dang nap du lieu...", WS_CHILD | WS_VISIBLE, 275, 183, 890, 20, hWnd, (HMENU)104, g_hInst, NULL);
+        g_hStatus = CreateWindowExW(0, L"STATIC", L"Dang nap du lieu...", WS_CHILD | WS_VISIBLE, 275, 183, 1020, 20, hWnd, (HMENU)104, g_hInst, NULL);
         SendMessageW(g_hStatus, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         g_hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 35, 210, 1290, 390, hWnd, (HMENU)105, g_hInst, NULL);
@@ -388,6 +385,69 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     }
 
+    case WM_NOTIFY: {
+        LPNMHDR pnmh = (LPNMHDR)lParam;
+        if (pnmh->idFrom == 105) {
+            if (pnmh->code == NM_CUSTOMDRAW) {
+                LPNMLVCUSTOMDRAW lplvcd = (LPNMLVCUSTOMDRAW)lParam;
+                switch (lplvcd->nmcd.dwDrawStage) {
+                case CDDS_PREPAINT:
+                    return CDRF_NOTIFYITEMDRAW;
+                case CDDS_ITEMPREPAINT:
+                    return CDRF_NOTIFYSUBITEMDRAW;
+                case CDDS_ITEMPREPAINT | CDDS_SUBITEM: {
+                    int item = (int)lplvcd->nmcd.dwItemSpec;
+                    int subItem = lplvcd->iSubItem;
+                    if (subItem == 13) {
+                        size_t match_idx = 0;
+                        for (size_t i = 0; i < g_components.count; ++i) {
+                            Component* c = &g_components.items[i];
+                            bool is_top = (strcmp(c->layer, "TopLayer") == 0 || strcmp(c->layer, "Top") == 0);
+                            if (is_top == g_showing_top) {
+                                if ((int)match_idx == item) {
+                                    if (c->skip != 0) {
+                                        // BẬT: Nút Màu Xanh Lá Cây
+                                        lplvcd->clrTextBk = RGB(34, 197, 94);
+                                        lplvcd->clrText = RGB(255, 255, 255);
+                                    } else {
+                                        // TẮT: Nút Màu Đen
+                                        lplvcd->clrTextBk = RGB(30, 41, 59);
+                                        lplvcd->clrText = RGB(226, 232, 240);
+                                    }
+                                    break;
+                                }
+                                match_idx++;
+                            }
+                        }
+                    }
+                    return CDRF_DODEFAULT;
+                }
+                }
+                return CDRF_DODEFAULT;
+            }
+            else if (pnmh->code == NM_CLICK || pnmh->code == NM_DBLCLK) {
+                LPNMITEMACTIVATE pia = (LPNMITEMACTIVATE)lParam;
+                if (pia->iItem >= 0 && (pia->iSubItem == 13 || pnmh->code == NM_DBLCLK)) {
+                    size_t match_idx = 0;
+                    for (size_t i = 0; i < g_components.count; ++i) {
+                        Component* c = &g_components.items[i];
+                        bool is_top = (strcmp(c->layer, "TopLayer") == 0 || strcmp(c->layer, "Top") == 0);
+                        if (is_top == g_showing_top) {
+                            if ((int)match_idx == pia->iItem) {
+                                c->skip = (c->skip == 0) ? 1 : 0;
+                                refresh_list_view();
+                                ListView_SetItemState(g_hListView, pia->iItem, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+                                break;
+                            }
+                            match_idx++;
+                        }
+                    }
+                }
+            }
+        }
+        break;
+    }
+
     case WM_COMMAND: {
         int wmId = LOWORD(wParam);
         switch (wmId) {
@@ -428,15 +488,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case 402: {
             g_showing_top = false;
             refresh_list_view();
-            break;
-        }
-        case 404: { // Toggle Skip
-            int sel = ListView_GetNextItem(g_hListView, -1, LVNI_SELECTED);
-            if (sel >= 0 && sel < (int)g_components.count) {
-                g_components.items[sel].skip = (g_components.items[sel].skip == 0) ? 1 : 0;
-                refresh_list_view();
-                ListView_SetItemState(g_hListView, sel, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
-            }
             break;
         }
         }

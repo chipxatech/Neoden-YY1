@@ -286,7 +286,7 @@ void refreshListView() {
         swprintf(buf, 64, L"%.2f", c.pick_height); ListView_SetItemText(g_hListView, (int)i, 10, buf);
         swprintf(buf, 64, L"%.2f", c.place_height); ListView_SetItemText(g_hListView, (int)i, 11, buf);
         swprintf(buf, 64, L"%d", c.mode); ListView_SetItemText(g_hListView, (int)i, 12, buf);
-        swprintf(buf, 64, L"%d", c.skip); ListView_SetItemText(g_hListView, (int)i, 13, buf);
+        ListView_SetItemText(g_hListView, (int)i, 13, (LPWSTR)(c.skip ? L"● BẬT" : L"○ TẮT"));
     }
 
     wchar_t statusText[256];
@@ -682,13 +682,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 145, 180, 120, 24, hWnd, (HMENU)402, g_hInst, NULL);
         SendMessageW(g_hRadioBot, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        HWND hBtnEdit = CreateWindowExW(0, L"BUTTON", L"Doi Khay Feeder", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1040, 178, 130, 26, hWnd, (HMENU)403, g_hInst, NULL);
+        HWND hBtnEdit = CreateWindowExW(0, L"BUTTON", L"Doi Khay Feeder", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1170, 178, 130, 26, hWnd, (HMENU)403, g_hInst, NULL);
         SendMessageW(hBtnEdit, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
-        HWND hBtnSkip = CreateWindowExW(0, L"BUTTON", L"Bat/Tat Skip", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1180, 178, 120, 26, hWnd, (HMENU)404, g_hInst, NULL);
-        SendMessageW(hBtnSkip, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
-
-        g_hStatus = CreateWindowExW(0, L"STATIC", L"Dang nap du lieu...", WS_CHILD | WS_VISIBLE, 275, 183, 750, 20, hWnd, (HMENU)104, g_hInst, NULL);
+        g_hStatus = CreateWindowExW(0, L"STATIC", L"Dang nap du lieu...", WS_CHILD | WS_VISIBLE, 275, 183, 880, 20, hWnd, (HMENU)104, g_hInst, NULL);
         SendMessageW(g_hStatus, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         g_hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 35, 210, 1290, 390, hWnd, (HMENU)105, g_hInst, NULL);
@@ -772,8 +769,62 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
     case WM_NOTIFY: {
         LPNMHDR pnmh = (LPNMHDR)lParam;
-        if (pnmh->idFrom == 105 && pnmh->code == NM_DBLCLK) {
-            editSelectedRow(hWnd);
+        if (pnmh->idFrom == 105) {
+            if (pnmh->code == NM_CUSTOMDRAW) {
+                LPNMLVCUSTOMDRAW lplvcd = (LPNMLVCUSTOMDRAW)lParam;
+                switch (lplvcd->nmcd.dwDrawStage) {
+                case CDDS_PREPAINT:
+                    return CDRF_NOTIFYITEMDRAW;
+                case CDDS_ITEMPREPAINT:
+                    return CDRF_NOTIFYSUBITEMDRAW;
+                case CDDS_ITEMPREPAINT | CDDS_SUBITEM: {
+                    int item = (int)lplvcd->nmcd.dwItemSpec;
+                    int subItem = lplvcd->iSubItem;
+                    if (subItem == 13) {
+                        const auto& list = g_showing_top ? g_top_components : g_bot_components;
+                        if (item >= 0 && item < (int)list.size()) {
+                            if (list[item].skip != 0) {
+                                // BẬT: Nút Màu Xanh Lá Cây
+                                lplvcd->clrTextBk = RGB(34, 197, 94);
+                                lplvcd->clrText = RGB(255, 255, 255);
+                            } else {
+                                // TẮT: Nút Màu Đen
+                                lplvcd->clrTextBk = RGB(30, 41, 59);
+                                lplvcd->clrText = RGB(226, 232, 240);
+                            }
+                        }
+                    }
+                    return CDRF_DODEFAULT;
+                }
+                }
+                return CDRF_DODEFAULT;
+            }
+            else if (pnmh->code == NM_CLICK) {
+                LPNMITEMACTIVATE pia = (LPNMITEMACTIVATE)lParam;
+                if (pia->iItem >= 0 && pia->iSubItem == 13) {
+                    auto& list = g_showing_top ? g_top_components : g_bot_components;
+                    if (pia->iItem < (int)list.size()) {
+                        list[pia->iItem].skip = (list[pia->iItem].skip == 0) ? 1 : 0;
+                        refreshListView();
+                        ListView_SetItemState(g_hListView, pia->iItem, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+                    }
+                }
+            }
+            else if (pnmh->code == NM_DBLCLK) {
+                LPNMITEMACTIVATE pia = (LPNMITEMACTIVATE)lParam;
+                if (pia->iItem >= 0) {
+                    if (pia->iSubItem == 13) {
+                        auto& list = g_showing_top ? g_top_components : g_bot_components;
+                        if (pia->iItem < (int)list.size()) {
+                            list[pia->iItem].skip = (list[pia->iItem].skip == 0) ? 1 : 0;
+                            refreshListView();
+                            ListView_SetItemState(g_hListView, pia->iItem, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+                        }
+                    } else {
+                        editSelectedRow(hWnd);
+                    }
+                }
+            }
         }
         break;
     }
@@ -826,16 +877,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         case 403: { // Sửa Feeder
             editSelectedRow(hWnd);
-            break;
-        }
-        case 404: { // Toggle Skip
-            auto& list = g_showing_top ? g_top_components : g_bot_components;
-            int sel = ListView_GetNextItem(g_hListView, -1, LVNI_SELECTED);
-            if (sel >= 0 && sel < (int)list.size()) {
-                list[sel].skip = (list[sel].skip == 0) ? 1 : 0;
-                refreshListView();
-                ListView_SetItemState(g_hListView, sel, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
-            }
             break;
         }
         }

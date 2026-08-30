@@ -136,6 +136,59 @@ struct OPENFILENAMEW {
     flags_ex: u32,
 }
 
+#[repr(C)]
+struct NMHDR {
+    hwnd_from: HWND,
+    id_from: usize,
+    code: u32,
+}
+
+#[repr(C)]
+struct NMCUSTOMDRAW {
+    hdr: NMHDR,
+    dw_draw_stage: u32,
+    hdc: HDC,
+    rc: RECT,
+    dw_item_spec: usize,
+    u_item_state: u32,
+    l_item_l_param: isize,
+}
+
+#[repr(C)]
+struct NMLVCUSTOMDRAW {
+    nmcd: NMCUSTOMDRAW,
+    clr_text: u32,
+    clr_text_bk: u32,
+    i_sub_item: i32,
+    dw_item_type: u32,
+    clr_face: u32,
+    i_icon_effect: i32,
+    i_icon_phase: i32,
+    i_part_id: i32,
+    i_state_id: i32,
+    rc_text: RECT,
+    u_align: u32,
+}
+
+#[repr(C)]
+struct POINT {
+    x: i32,
+    y: i32,
+}
+
+#[repr(C)]
+struct NMITEMACTIVATE {
+    hdr: NMHDR,
+    i_item: i32,
+    i_sub_item: i32,
+    u_new_state: u32,
+    u_old_state: u32,
+    u_changed: u32,
+    pt_action: POINT,
+    l_param: isize,
+    u_key_flags: u32,
+}
+
 #[derive(Clone, Debug)]
 pub struct Component {
     pub designator: String,
@@ -330,7 +383,7 @@ fn refresh_list_view() {
             set_sub(10, &format!("{:.2}", c.pick_height));
             set_sub(11, &format!("{:.2}", c.place_height));
             set_sub(12, &format!("{}", c.mode));
-            set_sub(13, &format!("{}", c.skip));
+            set_sub(13, if c.skip != 0 { "● BẬT" } else { "○ TẮT" });
         }
 
         let status_txt = format!(
@@ -731,6 +784,74 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
             EndPaint(hwnd, &ps);
             0
         }
+        0x004E => { // WM_NOTIFY
+            let pnmh = lparam as *const NMHDR;
+            if !pnmh.is_null() && unsafe { (*pnmh).id_from } == 105 {
+                let code = unsafe { (*pnmh).code };
+                if code == 0xFFFFFFF4 /* NM_CUSTOMDRAW */ {
+                    let pcustom = lparam as *mut NMLVCUSTOMDRAW;
+                    if !pcustom.is_null() {
+                        let draw_stage = unsafe { (*pcustom).nmcd.dw_draw_stage };
+                        if draw_stage == 0x00000001 /* CDDS_PREPAINT */ {
+                            return 0x00000020; /* CDRF_NOTIFYITEMDRAW */
+                        } else if draw_stage == 0x00010001 /* CDDS_ITEMPREPAINT */ {
+                            return 0x00000020; /* CDRF_NOTIFYSUBITEMDRAW */
+                        } else if draw_stage == (0x00010001 | 0x00020000) /* CDDS_ITEMPREPAINT | CDDS_SUBITEM */ {
+                            let item = unsafe { (*pcustom).nmcd.dw_item_spec } as usize;
+                            let sub_item = unsafe { (*pcustom).i_sub_item };
+                            if sub_item == 13 {
+                                let (showing_top, top_len, bot_len, is_skip) = {
+                                    let state = STATE.lock().unwrap();
+                                    let list = if state.showing_top { &state.top_components } else { &state.bot_components };
+                                    let is_skip = if item < list.len() { list[item].skip != 0 } else { false };
+                                    (state.showing_top, state.top_components.len(), state.bot_components.len(), is_skip)
+                                };
+                                if is_skip {
+                                    unsafe {
+                                        (*pcustom).clr_text_bk = 0x005EC522;
+                                        (*pcustom).clr_text = 0x00FFFFFF;
+                                    }
+                                } else {
+                                    unsafe {
+                                        (*pcustom).clr_text_bk = 0x003B291E;
+                                        (*pcustom).clr_text = 0x00F0E8E2;
+                                    }
+                                }
+                            }
+                            return 0x00000000;
+                        }
+                    }
+                    return 0x00000000;
+                } else if code == 0xFFFFFFFE /* NM_CLICK */ || code == 0xFFFFFFFD /* NM_DBLCLK */ {
+                    let pia = lparam as *const NMITEMACTIVATE;
+                    if !pia.is_null() {
+                        let item = unsafe { (*pia).i_item };
+                        let sub_item = unsafe { (*pia).i_sub_item };
+                        if item >= 0 && (sub_item == 13 || code == 0xFFFFFFFD) {
+                            let (hwnd_lv, showing_top) = {
+                                let state = STATE.lock().unwrap();
+                                (state.h_list_view, state.showing_top)
+                            };
+                            {
+                                let mut state = STATE.lock().unwrap();
+                                let list = if showing_top { &mut state.top_components } else { &mut state.bot_components };
+                                if (item as usize) < list.len() {
+                                    list[item as usize].skip = if list[item as usize].skip == 0 { 1 } else { 0 };
+                                }
+                            }
+                            refresh_list_view();
+                            unsafe {
+                                let mut lvi: LVITEMW = std::mem::zeroed();
+                                lvi.state_mask = 0x0003;
+                                lvi.state = 0x0003;
+                                SendMessageW(hwnd_lv, 0x102B /* LVM_SETITEMSTATE */, item as usize, &lvi as *const _ as isize);
+                            }
+                        }
+                    }
+                }
+            }
+            0
+        }
         0x0111 => { // WM_COMMAND
             let cmd_id = (wparam & 0xFFFF) as u32;
             match cmd_id {
@@ -781,21 +902,6 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                     {
                         let mut state = STATE.lock().unwrap();
                         state.showing_top = false;
-                    }
-                    refresh_list_view();
-                }
-                404 => { // Toggle Skip
-                    let (hwnd_lv, showing_top) = {
-                        let state = STATE.lock().unwrap();
-                        (state.h_list_view, state.showing_top)
-                    };
-                    let sel = SendMessageW(hwnd_lv, 0x100C /* LVM_GETNEXTITEM */, !0, 0x0002 /* LVNI_SELECTED */);
-                    {
-                        let mut state = STATE.lock().unwrap();
-                        let list = if showing_top { &mut state.top_components } else { &mut state.bot_components };
-                        if sel >= 0 && (sel as usize) < list.len() {
-                            list[sel as usize].skip = if list[sel as usize].skip == 0 { 1 } else { 0 };
-                        }
                     }
                     refresh_list_view();
                 }
@@ -949,10 +1055,7 @@ fn main() {
             state.h_radio_bot = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt BOTTOM").as_ptr(), 0x50000009, 145, 180, 120, 24, hwnd, 402 as *mut _, hinst, ptr::null_mut());
             SendMessageW(state.h_radio_bot, 0x0030, font_bold as usize, 1);
 
-            let btn_skip = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Bật/Tắt Skip").as_ptr(), 0x50000000, 1180, 178, 120, 26, hwnd, 404 as *mut _, hinst, ptr::null_mut());
-            SendMessageW(btn_skip, 0x0030, font_normal as usize, 1);
-
-            state.h_status = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Đang nạp dữ liệu...").as_ptr(), 0x50000000, 275, 183, 890, 20, hwnd, 104 as *mut _, hinst, ptr::null_mut());
+            state.h_status = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Đang nạp dữ liệu...").as_ptr(), 0x50000000, 275, 183, 1020, 20, hwnd, 104 as *mut _, hinst, ptr::null_mut());
             SendMessageW(state.h_status, 0x0030, font_bold as usize, 1);
 
             state.h_list_view = CreateWindowExW(0x00000200, to_wstr("SysListView32").as_ptr(), to_wstr("").as_ptr(), 0x50000001 | 0x0004, 35, 210, 1290, 390, hwnd, 105 as *mut _, hinst, ptr::null_mut());

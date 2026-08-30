@@ -519,7 +519,6 @@ class NeoDenYY1App:
         tk.Button(tb_bar, text="✏️ Sửa dòng đã chọn", font=("Segoe UI", 8, "bold"), bg="#0284C7", fg="white", bd=0, padx=8, pady=3, command=self.edit_selected_row).pack(side=tk.RIGHT, padx=3)
         tk.Button(tb_bar, text="➕ Thêm linh kiện", font=("Segoe UI", 8), bg="#334155", fg="white", bd=0, padx=8, pady=3, command=self.add_component).pack(side=tk.RIGHT, padx=3)
         tk.Button(tb_bar, text="🗑️ Xóa dòng", font=("Segoe UI", 8), bg="#DC2626", fg="white", bd=0, padx=8, pady=3, command=self.delete_selected_row).pack(side=tk.RIGHT, padx=3)
-        tk.Button(tb_bar, text="🔁 Đổi trạng thái Skip", font=("Segoe UI", 8), bg="#D97706", fg="white", bd=0, padx=8, pady=3, command=self.toggle_skip).pack(side=tk.RIGHT, padx=3)
         
         # Notebook Tabs TOP / BOTTOM
         self.notebook = ttk.Notebook(table_frame)
@@ -589,6 +588,23 @@ class NeoDenYY1App:
         tree.column("Footprint", anchor=tk.W)
         
         tree.pack(fill=tk.BOTH, expand=True)
+        
+        def on_table_click(event):
+            region = tree.identify_region(event.x, event.y)
+            if region == "cell":
+                col = tree.identify_column(event.x)
+                if col == "#14":  # Cột 14 là Skip
+                    item_id = tree.identify_row(event.y)
+                    if item_id:
+                        idx = int(item_id.split("_")[1])
+                        _, comp_list, _ = self.get_active_tree_and_list()
+                        if idx < len(comp_list):
+                            comp_list[idx]["skip"] = 0 if comp_list[idx].get("skip", 0) == 1 else 1
+                            self.refresh_tables()
+                            active_tree, _, _ = self.get_active_tree_and_list()
+                            active_tree.selection_set(item_id)
+                            
+        tree.bind("<ButtonRelease-1>", on_table_click)
         tree.bind("<Double-1>", lambda e: self.edit_selected_row())
         return tree
         
@@ -850,29 +866,35 @@ class NeoDenYY1App:
         # Refresh TOP
         self.tree_top.delete(*self.tree_top.get_children())
         for idx, c in enumerate(self.top_components):
-            tag = "skipped" if c.get("skip", 0) == 1 else "normal"
+            is_skip = (c.get("skip", 0) == 1)
+            skip_text = "● BẬT" if is_skip else "○ TẮT"
+            tag = "skip_on" if is_skip else "skip_off"
             self.tree_top.insert("", tk.END, iid=f"top_{idx}", values=(
                 idx + 1, c["designator"], c["comment"], c["footprint"],
                 f"{c['mid_x']:.2f}", f"{c['mid_y']:.2f}", f"{c['rotation']:.2f}",
                 c["head"], c["feeder_no"], c["mount_speed"],
                 f"{c['pick_height']:.2f}", f"{c['place_height']:.2f}",
-                c["mode"], c["skip"]
+                c["mode"], skip_text
             ), tags=(tag,))
             
         # Refresh BOT
         self.tree_bot.delete(*self.tree_bot.get_children())
         for idx, c in enumerate(self.bot_components):
-            tag = "skipped" if c.get("skip", 0) == 1 else "normal"
+            is_skip = (c.get("skip", 0) == 1)
+            skip_text = "● BẬT" if is_skip else "○ TẮT"
+            tag = "skip_on" if is_skip else "skip_off"
             self.tree_bot.insert("", tk.END, iid=f"bot_{idx}", values=(
                 idx + 1, c["designator"], c["comment"], c["footprint"],
                 f"{c['mid_x']:.2f}", f"{c['mid_y']:.2f}", f"{c['rotation']:.2f}",
                 c["head"], c["feeder_no"], c["mount_speed"],
                 f"{c['pick_height']:.2f}", f"{c['place_height']:.2f}",
-                c["mode"], c["skip"]
+                c["mode"], skip_text
             ), tags=(tag,))
             
-        self.tree_top.tag_configure("skipped", foreground="#94A3B8")
-        self.tree_bot.tag_configure("skipped", foreground="#94A3B8")
+        self.tree_top.tag_configure("skip_on", foreground="#22C55E")
+        self.tree_top.tag_configure("skip_off", foreground="#94A3B8")
+        self.tree_bot.tag_configure("skip_on", foreground="#22C55E")
+        self.tree_bot.tag_configure("skip_off", foreground="#94A3B8")
         
         self.notebook.tab(0, text=f"  Mặt TOP ({len(self.top_components)} linh kiện)  ")
         self.notebook.tab(1, text=f"  Mặt BOTTOM ({len(self.bot_components)} linh kiện)  ")
