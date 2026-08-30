@@ -789,6 +789,8 @@ class NeoDenYY1App:
         self.current_layer = "TOP" if selected_tab == 0 else "BOTTOM"
         
     def recalc_bottom_coordinates(self):
+        if not hasattr(self, 'board_width_var') or not hasattr(self, 'bot_components'):
+            return
         try:
             bw = float(self.board_width_var.get().strip())
         except Exception:
@@ -803,6 +805,8 @@ class NeoDenYY1App:
             c["mid_y"] = c.get("raw_mid_y", c.get("mid_y", 0.0))
             
     def on_board_width_changed(self):
+        if not hasattr(self, 'tree_bot') or not hasattr(self, 'bot_components'):
+            return
         self.recalc_bottom_coordinates()
         self.refresh_tables()
 

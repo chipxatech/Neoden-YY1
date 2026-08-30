@@ -1681,9 +1681,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         case 303: { // Ô Nhập Chiều rộng bo X
             if (HIWORD(wParam) == EN_CHANGE) {
-                recalcBottomCoordinates();
-                if (!g_showing_top) {
-                    refreshListView();
+                if (g_hListView != NULL && g_hEditBoardWidth != NULL) {
+                    recalcBottomCoordinates();
+                    if (!g_showing_top) {
+                        refreshListView();
+                    }
                 }
             }
             break;

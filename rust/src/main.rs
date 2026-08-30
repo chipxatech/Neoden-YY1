@@ -730,17 +730,19 @@ fn recalc_bottom_coordinates_rust() {
         let state = STATE.lock().unwrap();
         state.h_edit_board_width
     };
+    let mut parsed_bw = None;
     if !hwnd_bw.is_null() {
         let mut buf = [0u16; 64];
         unsafe {
             GetWindowTextW(hwnd_bw, buf.as_mut_ptr(), 64);
         }
         let s = String::from_utf16_lossy(&buf).trim_matches('\0').trim().to_string();
-        let val = s.parse::<f64>().unwrap_or(0.0);
-        let mut state = STATE.lock().unwrap();
-        state.board_width = val;
+        parsed_bw = s.parse::<f64>().ok();
     }
     let mut state = STATE.lock().unwrap();
+    if let Some(val) = parsed_bw {
+        state.board_width = val;
+    }
     let bw = state.board_width;
     for c in &mut state.bot_components {
         if bw > 0.0 {
@@ -1962,13 +1964,19 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                     refresh_list_view();
                 }
                 303 => { // Board width EN_CHANGE
-                    recalc_bottom_coordinates_rust();
-                    let is_bot = {
+                    let is_ready = {
                         let state = STATE.lock().unwrap();
-                        !state.showing_top
+                        !state.h_list_view.is_null() && !state.h_edit_board_width.is_null()
                     };
-                    if is_bot {
-                        refresh_list_view();
+                    if is_ready {
+                        recalc_bottom_coordinates_rust();
+                        let is_bot = {
+                            let state = STATE.lock().unwrap();
+                            !state.showing_top
+                        };
+                        if is_bot {
+                            refresh_list_view();
+                        }
                     }
                 }
                 401 => { // Radio TOP
@@ -2106,97 +2114,108 @@ fn main() {
             SendMessageW(hwnd, 0x0080, 0, h_icon_sm as isize);
         }
 
+        init_default_feeder_matrix_rust();
+
+        let font_normal = CreateFontW(15, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
+        let font_bold = CreateFontW(15, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
+
+        let btn_feeder = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC").as_ptr(), 0x50000000, 1050, 8, 290, 32, hwnd, 301 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(btn_feeder, 0x0030, font_bold as usize, 1);
+
+        let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
+        let prof_name = if act_name.is_empty() { "Mac_Dinh" } else { &act_name };
+        let prof_text = format!("⚙️ Quy tắc đang áp dụng: [{}]", prof_name);
+        let h_lbl_active_profile = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr(&prof_text).as_ptr(), 0x50000001 /* SS_CENTER */, 1050, 42, 290, 22, hwnd, 404 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(h_lbl_active_profile, 0x0030, font_bold as usize, 1);
+
+        let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 1. File Altium Pick & Place Đầu Vào ").as_ptr(), 0x50000007, 20, 75, 1320, 70, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        SendMessageW(grp1, 0x0030, font_bold as usize, 1);
+
+        let h_edit_input = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("").as_ptr(), 0x50000080, 35, 102, 1050, 26, hwnd, 101 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(h_edit_input, 0x0030, font_normal as usize, 1);
+
+        let btn_browse = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Chọn File...").as_ptr(), 0x50000000, 1100, 101, 110, 28, hwnd, 102 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(btn_browse, 0x0030, font_normal as usize, 1);
+
+        let btn_reload = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Tải Lại").as_ptr(), 0x50000000, 1220, 101, 90, 28, hwnd, 103 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(btn_reload, 0x0030, font_normal as usize, 1);
+
+        let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 2. Toàn Bộ 13 Cột Chuẩn NeoDen YY1 (Nhấp đúp chuột vào dòng để chỉnh sửa) ").as_ptr(), 0x50000007, 20, 155, 1320, 460, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        SendMessageW(grp2, 0x0030, font_bold as usize, 1);
+
+        let h_radio_top = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt TOP").as_ptr(), 0x50000009, 35, 180, 85, 24, hwnd, 401 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(h_radio_top, 0x0030, font_bold as usize, 1);
+        SendMessageW(h_radio_top, 0x00F1 /* BM_SETCHECK */, 1, 0);
+
+        let h_radio_bot = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt BOTTOM").as_ptr(), 0x50000009, 125, 180, 105, 24, hwnd, 402 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(h_radio_bot, 0x0030, font_bold as usize, 1);
+
+        let h_chk_auto_match = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Tự động nhận diện Feeder theo Cấu hình").as_ptr(), 0x50000003 /* BS_AUTOCHECKBOX */, 235, 180, 275, 24, hwnd, 302 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(h_chk_auto_match, 0x0030, font_bold as usize, 1);
+        SendMessageW(h_chk_auto_match, 0x00F1 /* BM_SETCHECK */, 1, 0);
+
+        let lbl_bw = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chiều rộng bo X (mm):").as_ptr(), 0x50000000, 520, 183, 155, 20, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        SendMessageW(lbl_bw, 0x0030, font_bold as usize, 1);
+
+        let h_edit_board_width = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("0.00").as_ptr(), 0x50000080, 680, 180, 75, 24, hwnd, 303 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(h_edit_board_width, 0x0030, font_bold as usize, 1);
+
+        let h_status = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chưa chọn file CAD nào").as_ptr(), 0x50000000, 765, 183, 560, 20, hwnd, 104 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(h_status, 0x0030, font_bold as usize, 1);
+
+        let h_list_view = CreateWindowExW(0x00000200, to_wstr("SysListView32").as_ptr(), to_wstr("").as_ptr(), 0x50000001 | 0x0004, 35, 210, 1290, 390, hwnd, 105 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(h_list_view, 0x0030, font_normal as usize, 1);
+        SendMessageW(h_list_view, 0x1036 /* LVM_SETEXTENDEDLISTVIEWSTYLE */, 0, 0x00000020 | 0x00000001);
+
+        // 13 Cột (Tổng 1259px tính sẵn thanh cuộn dọc không bị vỡ giao diện)
+        let cols = [
+            ("STT", 42, 2), ("Designator", 96, 2), ("Comment", 208, 0), ("Footprint", 162, 0),
+            ("Mid X", 90, 1), ("Mid Y", 90, 1), ("Rotation", 80, 1), ("Head", 55, 2),
+            ("FeederNo", 78, 2), ("Speed%", 78, 1), ("Pick(mm)", 88, 1), ("Place(mm)", 88, 1),
+            ("Mode", 56, 2), ("Skip", 48, 2),
+        ];
+
+        for (i, (name, width, fmt)) in cols.iter().enumerate() {
+            let mut w_name = to_wstr(name);
+            let mut col_struct: LVCOLUMNW = std::mem::zeroed();
+            col_struct.mask = 0x0001 | 0x0002 | 0x0004;
+            col_struct.fmt = *fmt;
+            col_struct.cx = *width;
+            col_struct.psz_text = w_name.as_mut_ptr();
+            SendMessageW(h_list_view, 0x1061 /* LVM_INSERTCOLUMNW */, i, &col_struct as *const _ as isize);
+        }
+
+        let grp3 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 3. Lưu / Xuất File Sau Khi Chỉnh Sửa ").as_ptr(), 0x50000007, 20, 625, 1320, 135, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        SendMessageW(grp3, 0x0030, font_bold as usize, 1);
+
+        let lbl_top = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Tên file TOP:").as_ptr(), 0x50000000, 35, 652, 90, 20, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        SendMessageW(lbl_top, 0x0030, font_normal as usize, 1);
+
+        let h_edit_top = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("Top_Output.csv").as_ptr(), 0x50000080, 130, 648, 250, 26, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        SendMessageW(h_edit_top, 0x0030, font_normal as usize, 1);
+
+        let lbl_bot = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Tên file BOTTOM:").as_ptr(), 0x50000000, 420, 652, 120, 20, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        SendMessageW(lbl_bot, 0x0030, font_normal as usize, 1);
+
+        let h_edit_bot = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("Bot_Output.csv").as_ptr(), 0x50000080, 550, 648, 250, 26, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        SendMessageW(h_edit_bot, 0x0030, font_normal as usize, 1);
+
+        let btn_convert = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("LƯU FILE ĐÃ CHỈNH SỬA CHO MÁY NEODEN YY1").as_ptr(), 0x50000001, 35, 690, 1290, 48, hwnd, 201 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(btn_convert, 0x0030, font_main_title as usize, 1);
+
         {
-            init_default_feeder_matrix_rust();
             let mut state = STATE.lock().unwrap();
             state.hwnd = hwnd;
-
-            let font_normal = CreateFontW(15, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
-            let font_bold = CreateFontW(15, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
-
-            let btn_feeder = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC").as_ptr(), 0x50000000, 1050, 8, 290, 32, hwnd, 301 as *mut _, hinst, ptr::null_mut());
-            SendMessageW(btn_feeder, 0x0030, font_bold as usize, 1);
-
-            let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
-            let prof_name = if act_name.is_empty() { "Mac_Dinh" } else { &act_name };
-            let prof_text = format!("⚙️ Quy tắc đang áp dụng: [{}]", prof_name);
-            state.h_lbl_active_profile = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr(&prof_text).as_ptr(), 0x50000001 /* SS_CENTER */, 1050, 42, 290, 22, hwnd, 404 as *mut _, hinst, ptr::null_mut());
-            SendMessageW(state.h_lbl_active_profile, 0x0030, font_bold as usize, 1);
-
-            let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 1. File Altium Pick & Place Đầu Vào ").as_ptr(), 0x50000007, 20, 75, 1320, 70, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
-            SendMessageW(grp1, 0x0030, font_bold as usize, 1);
-
-            state.h_edit_input = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("").as_ptr(), 0x50000080, 35, 102, 1050, 26, hwnd, 101 as *mut _, hinst, ptr::null_mut());
-            SendMessageW(state.h_edit_input, 0x0030, font_normal as usize, 1);
-
-            let btn_browse = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Chọn File...").as_ptr(), 0x50000000, 1100, 101, 110, 28, hwnd, 102 as *mut _, hinst, ptr::null_mut());
-            SendMessageW(btn_browse, 0x0030, font_normal as usize, 1);
-
-            let btn_reload = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Tải Lại").as_ptr(), 0x50000000, 1220, 101, 90, 28, hwnd, 103 as *mut _, hinst, ptr::null_mut());
-            SendMessageW(btn_reload, 0x0030, font_normal as usize, 1);
-
-            let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 2. Toàn Bộ 13 Cột Chuẩn NeoDen YY1 (Nhấp đúp chuột vào dòng để chỉnh sửa) ").as_ptr(), 0x50000007, 20, 155, 1320, 460, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
-            SendMessageW(grp2, 0x0030, font_bold as usize, 1);
-
-            state.h_radio_top = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt TOP").as_ptr(), 0x50000009, 35, 180, 85, 24, hwnd, 401 as *mut _, hinst, ptr::null_mut());
-            SendMessageW(state.h_radio_top, 0x0030, font_bold as usize, 1);
-            SendMessageW(state.h_radio_top, 0x00F1 /* BM_SETCHECK */, 1, 0);
-
-            state.h_radio_bot = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt BOTTOM").as_ptr(), 0x50000009, 125, 180, 105, 24, hwnd, 402 as *mut _, hinst, ptr::null_mut());
-            SendMessageW(state.h_radio_bot, 0x0030, font_bold as usize, 1);
-
-            state.h_chk_auto_match = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Tự động nhận diện Feeder theo Cấu hình").as_ptr(), 0x50000003 /* BS_AUTOCHECKBOX */, 235, 180, 275, 24, hwnd, 302 as *mut _, hinst, ptr::null_mut());
-            SendMessageW(state.h_chk_auto_match, 0x0030, font_bold as usize, 1);
-            SendMessageW(state.h_chk_auto_match, 0x00F1 /* BM_SETCHECK */, 1, 0);
-
-            let lbl_bw = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chiều rộng bo X (mm):").as_ptr(), 0x50000000, 520, 183, 155, 20, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
-            SendMessageW(lbl_bw, 0x0030, font_bold as usize, 1);
-
-            state.h_edit_board_width = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("0.00").as_ptr(), 0x50000080, 680, 180, 75, 24, hwnd, 303 as *mut _, hinst, ptr::null_mut());
-            SendMessageW(state.h_edit_board_width, 0x0030, font_bold as usize, 1);
-
-            state.h_status = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chưa chọn file CAD nào").as_ptr(), 0x50000000, 765, 183, 560, 20, hwnd, 104 as *mut _, hinst, ptr::null_mut());
-            SendMessageW(state.h_status, 0x0030, font_bold as usize, 1);
-
-            state.h_list_view = CreateWindowExW(0x00000200, to_wstr("SysListView32").as_ptr(), to_wstr("").as_ptr(), 0x50000001 | 0x0004, 35, 210, 1290, 390, hwnd, 105 as *mut _, hinst, ptr::null_mut());
-            SendMessageW(state.h_list_view, 0x0030, font_normal as usize, 1);
-            SendMessageW(state.h_list_view, 0x1036 /* LVM_SETEXTENDEDLISTVIEWSTYLE */, 0, 0x00000020 | 0x00000001);
-
-            // 13 Cột (Tổng 1259px tính sẵn thanh cuộn dọc không bị vỡ giao diện)
-            let cols = [
-                ("STT", 42, 2), ("Designator", 96, 2), ("Comment", 208, 0), ("Footprint", 162, 0),
-                ("Mid X", 90, 1), ("Mid Y", 90, 1), ("Rotation", 80, 1), ("Head", 55, 2),
-                ("FeederNo", 78, 2), ("Speed%", 78, 1), ("Pick(mm)", 88, 1), ("Place(mm)", 88, 1),
-                ("Mode", 56, 2), ("Skip", 48, 2),
-            ];
-
-            for (i, (name, width, fmt)) in cols.iter().enumerate() {
-                let mut w_name = to_wstr(name);
-                let mut col_struct: LVCOLUMNW = std::mem::zeroed();
-                col_struct.mask = 0x0001 | 0x0002 | 0x0004;
-                col_struct.fmt = *fmt;
-                col_struct.cx = *width;
-                col_struct.psz_text = w_name.as_mut_ptr();
-                SendMessageW(state.h_list_view, 0x1061 /* LVM_INSERTCOLUMNW */, i, &col_struct as *const _ as isize);
-            }
-
-            let grp3 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 3. Lưu / Xuất File Sau Khi Chỉnh Sửa ").as_ptr(), 0x50000007, 20, 625, 1320, 135, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
-            SendMessageW(grp3, 0x0030, font_bold as usize, 1);
-
-            let lbl_top = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Tên file TOP:").as_ptr(), 0x50000000, 35, 652, 90, 20, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
-            SendMessageW(lbl_top, 0x0030, font_normal as usize, 1);
-
-            state.h_edit_top = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("Top_Output.csv").as_ptr(), 0x50000080, 130, 648, 250, 26, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
-            SendMessageW(state.h_edit_top, 0x0030, font_normal as usize, 1);
-
-            let lbl_bot = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Tên file BOTTOM:").as_ptr(), 0x50000000, 420, 652, 120, 20, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
-            SendMessageW(lbl_bot, 0x0030, font_normal as usize, 1);
-
-            state.h_edit_bot = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("Bot_Output.csv").as_ptr(), 0x50000080, 550, 648, 250, 26, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
-            SendMessageW(state.h_edit_bot, 0x0030, font_normal as usize, 1);
-
-            let btn_convert = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("LƯU FILE ĐÃ CHỈNH SỬA CHO MÁY NEODEN YY1").as_ptr(), 0x50000001, 35, 690, 1290, 48, hwnd, 201 as *mut _, hinst, ptr::null_mut());
-            SendMessageW(btn_convert, 0x0030, font_main_title as usize, 1);
+            state.h_lbl_active_profile = h_lbl_active_profile;
+            state.h_edit_input = h_edit_input;
+            state.h_radio_top = h_radio_top;
+            state.h_radio_bot = h_radio_bot;
+            state.h_chk_auto_match = h_chk_auto_match;
+            state.h_edit_board_width = h_edit_board_width;
+            state.h_status = h_status;
+            state.h_list_view = h_list_view;
+            state.h_edit_top = h_edit_top;
+            state.h_edit_bot = h_edit_bot;
         }
 
         // Khởi động giao diện sạch sẽ, người dùng tự chọn file cần mở
