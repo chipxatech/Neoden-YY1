@@ -456,7 +456,7 @@ class NeoDenYY1App:
         
     def update_active_profile_label(self):
         if hasattr(self, "lbl_active_profile"):
-            self.lbl_active_profile.config(text=f"⚙️ Quy Tắc Feeder: [{self.active_profile}]")
+            self.lbl_active_profile.config(text=f"⚙️ Quy tắc đang áp dụng: [{self.active_profile}]")
             
     def load_feeder_matrix_file(self):
         if os.path.exists(self.matrix_file):
@@ -562,25 +562,25 @@ class NeoDenYY1App:
         sub_lbl = ttk.Label(title_box, text="⚡ Tự động nạp 13 cột • Chỉnh sửa thông số trực tiếp • Thiết lập ma trận khay Feeder 4 góc (1..13, 14..24, 30..39, 40..50)", style="SubHeader.TLabel")
         sub_lbl.pack(anchor=tk.W, pady=(1, 0))
         
-        # Nút Cấu Hình Feeder 4 Góc và Nhãn Profile Đang Áp Dụng
+        # Nút Cấu Hình Feeder 4 Góc & Nhãn Profile Đang Áp Dụng (Nằm Dưới Nút)
         feeder_box = tk.Frame(header_frame, bg=bg_dark)
-        feeder_box.pack(side=tk.RIGHT, padx=5, pady=5)
+        feeder_box.pack(side=tk.RIGHT, padx=5, pady=2)
+        
+        btn_feeder = ttk.Button(feeder_box, text="⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC", style="Feeder.TButton", command=self.open_feeder_matrix_dialog)
+        btn_feeder.pack(side=tk.TOP, fill=tk.X, pady=(0, 3))
         
         self.lbl_active_profile = tk.Label(
             feeder_box,
-            text=f"⚙️ Quy Tắc Feeder: [{self.active_profile}]",
+            text=f"⚙️ Quy tắc đang áp dụng: [{self.active_profile}]",
             font=("Segoe UI", 9, "bold"),
-            fg="#A78BFA",
+            fg="#38BDF8",
             bg="#1E293B",
-            padx=10,
-            pady=6,
+            padx=8,
+            pady=3,
             bd=1,
             relief="ridge"
         )
-        self.lbl_active_profile.pack(side=tk.LEFT, padx=(0, 8))
-        
-        btn_feeder = ttk.Button(feeder_box, text="⚙️ CẤU HÌNH KHAY FEEDER...", style="Feeder.TButton", command=self.open_feeder_matrix_dialog)
-        btn_feeder.pack(side=tk.LEFT)
+        self.lbl_active_profile.pack(side=tk.TOP, fill=tk.X)
         
         # --- KHỐI 1: CHỌN FILE ALTIUM ---
         input_frame = ttk.LabelFrame(main_container, text="  1. File Altium Pick & Place Đầu Vào  ", style="Card.TLabelframe", padding=10)

@@ -357,10 +357,10 @@ unsafe fn refresh_active_profile_label_rust() {
     };
     if !hwnd.is_null() {
         let mut rc: RECT = std::mem::zeroed();
-        rc.left = 750;
+        rc.left = 1040;
         rc.top = 0;
-        rc.right = 1380;
-        rc.bottom = 70;
+        rc.right = 1360;
+        rc.bottom = 72;
         InvalidateRect(hwnd, &rc, 1);
     }
 }
@@ -1608,32 +1608,16 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
             TextOutW(hdc, 90, 52, sub.as_ptr(), (sub.len() - 1) as i32);
 
             // ----------------------------------------------------
-            // Vẽ Badge Cấu Hình Feeder Đang Áp Dụng ở góc trên phải
+            // Vẽ Nhãn Quy Tắc Feeder Đang Áp Dụng nằm trực tiếp bên dưới nút Feeder
             // ----------------------------------------------------
             let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
             let prof_name = if act_name.is_empty() { "Mac_Dinh" } else { &act_name };
 
-            let h_badge_brush = CreateSolidBrush(0x00FFF5EE); // Light Lavender / Indigo background
-            let h_badge_pen = CreatePen(0, 1, 0x00C4B5FD); // Accent border
-            let old_brush = SelectObject(hdc, h_badge_brush as HGDIOBJ);
-            let old_pen = SelectObject(hdc, h_badge_pen as HGDIOBJ);
-
-            RoundRect(hdc, 820, 10, 1130, 56, 10, 10);
-
-            SelectObject(hdc, f_sub);
-            SetTextColor(hdc, 0x007C3AED); // Vivid Purple #7C3AED
-            let badge_lbl = to_wstr("⚙️ QUY TẮC FEEDER ÁP DỤNG:");
-            TextOutW(hdc, 835, 14, badge_lbl.as_ptr(), (badge_lbl.len() - 1) as i32);
-
             SelectObject(hdc, f_author);
-            SetTextColor(hdc, 0x005B21B6); // Deep Indigo
-            let badge_val = to_wstr(&format!("[ {} ]", prof_name));
-            TextOutW(hdc, 835, 32, badge_val.as_ptr(), (badge_val.len() - 1) as i32);
-
-            SelectObject(hdc, old_brush);
-            SelectObject(hdc, old_pen);
-            DeleteObject(h_badge_brush as HGDIOBJ);
-            DeleteObject(h_badge_pen as HGDIOBJ);
+            SetTextColor(hdc, 0x00C78402); // Vibrant Blue #0284C7 in BGR
+            let prof_str = to_wstr(&format!("⚙️ Quy tắc đang áp dụng: [{}]", prof_name));
+            let mut rc_prof = RECT { left: 1060, top: 44, right: 1340, bottom: 68 };
+            DrawTextW(hdc, prof_str.as_ptr(), -1, &mut rc_prof, 0x00000001 | 0x00000004 | 0x00000020 /* DT_CENTER | DT_VCENTER | DT_SINGLELINE */);
 
             EndPaint(hwnd, &ps);
             0
@@ -1932,12 +1916,7 @@ fn main() {
             let font_normal = CreateFontW(15, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
             let font_bold = CreateFontW(15, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
 
-            let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
-            let prof_text = format!("⚙️ Quy Tắc Feeder: [{}]", if act_name.is_empty() { "Mac_Dinh" } else { &act_name });
-            state.h_lbl_active_profile = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr(&prof_text).as_ptr(), 0x50000002 /* SS_RIGHT */, 900, 18, 240, 24, hwnd, 404 as *mut _, hinst, ptr::null_mut());
-            SendMessageW(state.h_lbl_active_profile, 0x0030, font_bold as usize, 1);
-
-            let btn_feeder = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("⚙️ Cấu Hình Feeder 4 Góc").as_ptr(), 0x50000000, 1150, 14, 190, 32, hwnd, 301 as *mut _, hinst, ptr::null_mut());
+            let btn_feeder = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC").as_ptr(), 0x50000000, 1060, 10, 280, 32, hwnd, 301 as *mut _, hinst, ptr::null_mut());
             SendMessageW(btn_feeder, 0x0030, font_bold as usize, 1);
 
             let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 1. File Altium Pick & Place Đầu Vào ").as_ptr(), 0x50000007, 20, 75, 1320, 70, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
