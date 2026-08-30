@@ -399,6 +399,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     int item = (int)lplvcd->nmcd.dwItemSpec;
                     int subItem = lplvcd->iSubItem;
                     if (subItem == 13) {
+                        lplvcd->nmcd.uItemState &= ~(CDIS_SELECTED | CDIS_FOCUS | CDIS_HOT);
                         size_t match_idx = 0;
                         for (size_t i = 0; i < g_components.count; ++i) {
                             Component* c = &g_components.items[i];
@@ -436,7 +437,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             if ((int)match_idx == pia->iItem) {
                                 c->skip = (c->skip == 0) ? 1 : 0;
                                 refresh_list_view();
-                                ListView_SetItemState(g_hListView, pia->iItem, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+                                ListView_SetItemState(g_hListView, -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
                                 break;
                             }
                             match_idx++;

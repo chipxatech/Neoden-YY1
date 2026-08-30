@@ -602,7 +602,7 @@ class NeoDenYY1App:
                             comp_list[idx]["skip"] = 0 if comp_list[idx].get("skip", 0) == 1 else 1
                             self.refresh_tables()
                             active_tree, _, _ = self.get_active_tree_and_list()
-                            active_tree.selection_set(item_id)
+                            active_tree.selection_remove(active_tree.selection())
                             
         tree.bind("<ButtonRelease-1>", on_table_click)
         tree.bind("<Double-1>", lambda e: self.edit_selected_row())

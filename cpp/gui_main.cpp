@@ -781,6 +781,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     int item = (int)lplvcd->nmcd.dwItemSpec;
                     int subItem = lplvcd->iSubItem;
                     if (subItem == 13) {
+                        lplvcd->nmcd.uItemState &= ~(CDIS_SELECTED | CDIS_FOCUS | CDIS_HOT);
                         const auto& list = g_showing_top ? g_top_components : g_bot_components;
                         if (item >= 0 && item < (int)list.size()) {
                             if (list[item].skip != 0) {
@@ -806,7 +807,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     if (pia->iItem < (int)list.size()) {
                         list[pia->iItem].skip = (list[pia->iItem].skip == 0) ? 1 : 0;
                         refreshListView();
-                        ListView_SetItemState(g_hListView, pia->iItem, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+                        ListView_SetItemState(g_hListView, -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
                     }
                 }
             }
@@ -818,7 +819,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         if (pia->iItem < (int)list.size()) {
                             list[pia->iItem].skip = (list[pia->iItem].skip == 0) ? 1 : 0;
                             refreshListView();
-                            ListView_SetItemState(g_hListView, pia->iItem, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+                            ListView_SetItemState(g_hListView, -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
                         }
                     } else {
                         editSelectedRow(hWnd);

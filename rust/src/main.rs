@@ -800,7 +800,10 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                             let item = unsafe { (*pcustom).nmcd.dw_item_spec } as usize;
                             let sub_item = unsafe { (*pcustom).i_sub_item };
                             if sub_item == 13 {
-                                let (showing_top, top_len, bot_len, is_skip) = {
+                                unsafe {
+                                    (*pcustom).nmcd.u_item_state &= !(0x00000001 | 0x00000010 | 0x00000040);
+                                }
+                                let (_showing_top, _top_len, _bot_len, is_skip) = {
                                     let state = STATE.lock().unwrap();
                                     let list = if state.showing_top { &state.top_components } else { &state.bot_components };
                                     let is_skip = if item < list.len() { list[item].skip != 0 } else { false };
@@ -845,8 +848,8 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                             unsafe {
                                 let mut lvi: LVITEMW = std::mem::zeroed();
                                 lvi.state_mask = 0x0003;
-                                lvi.state = 0x0003;
-                                SendMessageW(hwnd_lv, 0x102B /* LVM_SETITEMSTATE */, item as usize, &lvi as *const _ as isize);
+                                lvi.state = 0;
+                                SendMessageW(hwnd_lv, 0x102B /* LVM_SETITEMSTATE */, !0, &lvi as *const _ as isize);
                             }
                         }
                     }
