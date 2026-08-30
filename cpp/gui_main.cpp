@@ -895,9 +895,28 @@ void doSaveAndExport() {
         if (res != IDYES) return;
     }
 
+    wchar_t inPath[MAX_PATH] = {0};
+    if (g_hEditInput) GetWindowTextW(g_hEditInput, inPath, MAX_PATH);
+
+    std::wstring folderName = L"Output";
+    if (wcslen(inPath) > 0) {
+        std::filesystem::path p(inPath);
+        std::wstring stem = p.stem().wstring();
+        if (!stem.empty()) {
+            folderName = stem;
+        }
+    }
+
+    try {
+        std::filesystem::create_directories(folderName);
+    } catch (...) {}
+
     wchar_t topName[256] = {0}, botName[256] = {0};
     if (g_hEditTop) GetWindowTextW(g_hEditTop, topName, 256);
     if (g_hEditBot) GetWindowTextW(g_hEditBot, botName, 256);
+
+    std::filesystem::path topFullPath = std::filesystem::path(folderName) / topName;
+    std::filesystem::path botFullPath = std::filesystem::path(folderName) / botName;
 
     std::string headerStr = EMBEDDED_HEADER;
     std::ifstream tf("0603Demo.csv", std::ios::binary);
@@ -914,11 +933,11 @@ void doSaveAndExport() {
     }
 
     int saved_count = 0;
-    std::wstring reportMsg;
+    std::wstring reportMsg = L"📁 Thư mục lưu: " + folderName + L"\\\n\n";
 
     // Xuất TOP nếu có
     if (has_top) {
-        std::ofstream outTop(ws2s(topName), std::ios::binary);
+        std::ofstream outTop(topFullPath.string(), std::ios::binary);
         if (outTop.is_open()) {
             outTop << headerStr;
             outTop << std::fixed << std::setprecision(2);
@@ -939,13 +958,13 @@ void doSaveAndExport() {
             }
             outTop.close();
             saved_count++;
-            reportMsg += L"⭐ Mặt TOP:\n   • Số linh kiện: " + std::to_wstring(g_top_components.size()) + L"\n   • File: " + topName + L"\n\n";
+            reportMsg += L"⭐ Mặt TOP:\n   • Số linh kiện: " + std::to_wstring(g_top_components.size()) + L"\n   • File: " + topFullPath.wstring() + L"\n\n";
         }
     }
 
     // Xuất BOT nếu có
     if (has_bot) {
-        std::ofstream outBot(ws2s(botName), std::ios::binary);
+        std::ofstream outBot(botFullPath.string(), std::ios::binary);
         if (outBot.is_open()) {
             outBot << headerStr;
             outBot << std::fixed << std::setprecision(2);
@@ -966,14 +985,14 @@ void doSaveAndExport() {
             }
             outBot.close();
             saved_count++;
-            reportMsg += L"⭐ Mặt BOTTOM:\n   • Số linh kiện: " + std::to_wstring(g_bot_components.size()) + L"\n   • File: " + botName + L"\n\n";
+            reportMsg += L"⭐ Mặt BOTTOM:\n   • Số linh kiện: " + std::to_wstring(g_bot_components.size()) + L"\n   • File: " + botFullPath.wstring() + L"\n\n";
         }
     }
 
     if (saved_count > 0) {
         std::wstring msg = L"🎉 ĐÃ LƯU FILE CHỈNH SỬA CHO MÁY NEODEN YY1!\n\n" + reportMsg + L"Toàn bộ 13 thông số đã chỉnh sửa được lưu chính xác 100%.\nBạn có muốn mở thư mục chứa file vừa lưu?";
         if (MessageBoxW(g_hWnd, msg.c_str(), L"Lưu Thành Công", MB_ICONINFORMATION | MB_YESNO) == IDYES) {
-            ShellExecuteW(NULL, L"open", L".", NULL, NULL, SW_SHOWNORMAL);
+            ShellExecuteW(NULL, L"open", folderName.c_str(), NULL, NULL, SW_SHOWNORMAL);
         }
     } else {
         MessageBoxW(g_hWnd, L"Lỗi ghi file!", L"Lỗi", MB_ICONERROR);

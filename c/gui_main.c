@@ -346,13 +346,35 @@ static void on_save_clicked(void) {
         if (res != IDYES) return;
     }
 
+    wchar_t inPath[MAX_PATH] = {0};
+    if (g_hEditInput_c) GetWindowTextW(g_hEditInput_c, inPath, MAX_PATH);
+
+    wchar_t folderName[MAX_PATH] = L"Output";
+    if (wcslen(inPath) > 0) {
+        const wchar_t* pName = wcsrchr(inPath, L'\\');
+        if (!pName) pName = wcsrchr(inPath, L'/');
+        if (pName) pName++;
+        else pName = inPath;
+        
+        wcscpy(folderName, pName);
+        wchar_t* dot = wcsrchr(folderName, L'.');
+        if (dot) *dot = L'\0';
+        if (wcslen(folderName) == 0) wcscpy(folderName, L"Output");
+    }
+
+    CreateDirectoryW(folderName, NULL);
+
     wchar_t w_top[MAX_PATH] = {0}, w_bot[MAX_PATH] = {0};
     if (g_hEditTop) GetWindowTextW(g_hEditTop, w_top, MAX_PATH);
     if (g_hEditBot) GetWindowTextW(g_hEditBot, w_bot, MAX_PATH);
 
+    wchar_t w_top_full[MAX_PATH] = {0}, w_bot_full[MAX_PATH] = {0};
+    swprintf(w_top_full, MAX_PATH, L"%ls\\%ls", folderName, w_top);
+    swprintf(w_bot_full, MAX_PATH, L"%ls\\%ls", folderName, w_bot);
+
     char top_out[MAX_PATH] = {0}, bot_out[MAX_PATH] = {0};
-    WideCharToMultiByte(CP_UTF8, 0, w_top, -1, top_out, sizeof(top_out), NULL, NULL);
-    WideCharToMultiByte(CP_UTF8, 0, w_bot, -1, bot_out, sizeof(bot_out), NULL, NULL);
+    WideCharToMultiByte(CP_UTF8, 0, w_top_full, -1, top_out, sizeof(top_out), NULL, NULL);
+    WideCharToMultiByte(CP_UTF8, 0, w_bot_full, -1, bot_out, sizeof(bot_out), NULL, NULL);
 
     LayerSummary top_sum, bot_sum;
     memset(&top_sum, 0, sizeof(top_sum));
@@ -369,33 +391,36 @@ static void on_save_clicked(void) {
     }
 
     if (ok_top && ok_bot) {
-        wchar_t reportMsg[512] = {0};
+        wchar_t reportMsg[1024] = {0};
         if (has_top && has_bot) {
-            swprintf(reportMsg, 512,
-                L"⭐ Mặt TOP:\n   • Số linh kiện: %zu\n   • File: %ls\n\n⭐ Mặt BOTTOM:\n   • Số linh kiện: %zu\n   • File: %ls\n\n",
-                top_sum.total_components, w_top,
-                bot_sum.total_components, w_bot
+            swprintf(reportMsg, 1024,
+                L"📁 Thư mục lưu: %ls\\\n\n⭐ Mặt TOP:\n   • Số linh kiện: %zu\n   • File: %ls\n\n⭐ Mặt BOTTOM:\n   • Số linh kiện: %zu\n   • File: %ls\n\n",
+                folderName,
+                top_sum.total_components, w_top_full,
+                bot_sum.total_components, w_bot_full
             );
         } else if (has_top) {
-            swprintf(reportMsg, 512,
-                L"⭐ Mặt TOP:\n   • Số linh kiện: %zu\n   • File: %ls\n\n",
-                top_sum.total_components, w_top
+            swprintf(reportMsg, 1024,
+                L"📁 Thư mục lưu: %ls\\\n\n⭐ Mặt TOP:\n   • Số linh kiện: %zu\n   • File: %ls\n\n",
+                folderName,
+                top_sum.total_components, w_top_full
             );
         } else if (has_bot) {
-            swprintf(reportMsg, 512,
-                L"⭐ Mặt BOTTOM:\n   • Số linh kiện: %zu\n   • File: %ls\n\n",
-                bot_sum.total_components, w_bot
+            swprintf(reportMsg, 1024,
+                L"📁 Thư mục lưu: %ls\\\n\n⭐ Mặt BOTTOM:\n   • Số linh kiện: %zu\n   • File: %ls\n\n",
+                folderName,
+                bot_sum.total_components, w_bot_full
             );
         }
 
-        wchar_t msg[1024];
-        swprintf(msg, 1024,
+        wchar_t msg[1280];
+        swprintf(msg, 1280,
             L"🎉 ĐÃ LƯU BẢN CHỈNH SỬA CHO MÁY NEODEN YY1!\n\n%lsToàn bộ 13 thông số đã chỉnh sửa được lưu chính xác 100%.\nBạn có muốn mở thư mục chứa file vừa tạo?",
             reportMsg
         );
 
         if (MessageBoxW(g_hWnd, msg, L"Lưu Thành Công", MB_ICONINFORMATION | MB_YESNO) == IDYES) {
-            ShellExecuteW(NULL, L"open", L".", NULL, NULL, SW_SHOWNORMAL);
+            ShellExecuteW(NULL, L"open", folderName, NULL, NULL, SW_SHOWNORMAL);
         }
     } else {
         wchar_t w_err[256];

@@ -1030,6 +1030,28 @@ fn save_outputs() {
         }
     }
 
+    let in_path = {
+        let mut w_in = [0u16; 260];
+        unsafe {
+            let state = STATE.lock().unwrap();
+            if !state.h_edit_input.is_null() {
+                GetWindowTextW(state.h_edit_input, w_in.as_mut_ptr(), 260);
+            }
+        }
+        from_wstr(w_in.as_ptr())
+    };
+
+    let folder_name = {
+        let p = std::path::Path::new(&in_path);
+        if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+            if !stem.is_empty() { stem.to_string() } else { "Output".to_string() }
+        } else {
+            "Output".to_string()
+        }
+    };
+
+    let _ = std::fs::create_dir_all(&folder_name);
+
     let mut w_top = [0u16; 260];
     let mut w_bot = [0u16; 260];
     unsafe {
@@ -1038,6 +1060,9 @@ fn save_outputs() {
     }
     let top_name = from_wstr(w_top.as_ptr());
     let bot_name = from_wstr(w_bot.as_ptr());
+
+    let top_save_path = format!("{}/{}", folder_name, top_name);
+    let bot_save_path = format!("{}/{}", folder_name, bot_name);
 
     let write_file = |name: &str, list: &Vec<Component>| -> bool {
         if let Ok(mut f) = File::create(name) {
@@ -1060,21 +1085,21 @@ fn save_outputs() {
 
     let mut ok_top = true;
     if has_top {
-        ok_top = write_file(&top_name, &top_comps);
+        ok_top = write_file(&top_save_path, &top_comps);
     }
     let mut ok_bot = true;
     if has_bot {
-        ok_bot = write_file(&bot_name, &bot_comps);
+        ok_bot = write_file(&bot_save_path, &bot_comps);
     }
 
     if ok_top && ok_bot {
-        let mut report_msg = String::new();
+        let mut report_msg = format!("📁 Thư mục lưu: {}\\\n\n", folder_name);
         if has_top && has_bot {
-            report_msg = format!("⭐ Mặt TOP:\n   • Số linh kiện: {}\n   • File: {}\n\n⭐ Mặt BOTTOM:\n   • Số linh kiện: {}\n   • File: {}\n\n", top_comps.len(), top_name, bot_comps.len(), bot_name);
+            report_msg.push_str(&format!("⭐ Mặt TOP:\n   • Số linh kiện: {}\n   • File: {}\n\n⭐ Mặt BOTTOM:\n   • Số linh kiện: {}\n   • File: {}\n\n", top_comps.len(), top_save_path, bot_comps.len(), bot_save_path));
         } else if has_top {
-            report_msg = format!("⭐ Mặt TOP:\n   • Số linh kiện: {}\n   • File: {}\n\n", top_comps.len(), top_name);
+            report_msg.push_str(&format!("⭐ Mặt TOP:\n   • Số linh kiện: {}\n   • File: {}\n\n", top_comps.len(), top_save_path));
         } else if has_bot {
-            report_msg = format!("⭐ Mặt BOTTOM:\n   • Số linh kiện: {}\n   • File: {}\n\n", bot_comps.len(), bot_name);
+            report_msg.push_str(&format!("⭐ Mặt BOTTOM:\n   • Số linh kiện: {}\n   • File: {}\n\n", bot_comps.len(), bot_save_path));
         }
 
         let msg = format!(
@@ -1083,7 +1108,7 @@ fn save_outputs() {
         );
         unsafe {
             if MessageBoxW(hwnd, to_wstr(&msg).as_ptr(), to_wstr("Lưu Thành Công").as_ptr(), 0x0040 | 0x0004) == 6 {
-                ShellExecuteW(ptr::null_mut(), to_wstr("open").as_ptr(), to_wstr(".").as_ptr(), ptr::null(), ptr::null(), 1);
+                ShellExecuteW(ptr::null_mut(), to_wstr("open").as_ptr(), to_wstr(&folder_name).as_ptr(), ptr::null(), ptr::null(), 1);
             }
         }
     } else {

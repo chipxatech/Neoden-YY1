@@ -1624,6 +1624,20 @@ class NeoDenYY1App:
             ):
                 return
 
+        in_path = self.input_file.get().strip()
+        if in_path:
+            folder_name = os.path.splitext(os.path.basename(in_path))[0]
+            if not folder_name:
+                folder_name = "Output"
+        else:
+            folder_name = "Output"
+
+        target_dir = os.path.join(self.base_dir, folder_name)
+        try:
+            os.makedirs(target_dir, exist_ok=True)
+        except Exception:
+            target_dir = self.base_dir
+
         try:
             header_str = (
                 "NEODEN,YY1,P&P FILE,,,,,,,,,,\r\n"
@@ -1649,10 +1663,10 @@ class NeoDenYY1App:
                             header_str = "".join(t_lines)
                             break
                             
-            report_items = []
+            report_items = [f"📁 Thư mục lưu: {folder_name}\\"]
             # Lưu TOP nếu có
             if has_top:
-                top_out_path = os.path.join(self.base_dir, self.top_output_name.get().strip())
+                top_out_path = os.path.join(target_dir, self.top_output_name.get().strip())
                 with open(top_out_path, "w", encoding="utf-8", newline="") as f:
                     f.write(header_str)
                     for c in self.top_components:
@@ -1662,7 +1676,7 @@ class NeoDenYY1App:
                     
             # Lưu BOT nếu có
             if has_bot:
-                bot_out_path = os.path.join(self.base_dir, self.bot_output_name.get().strip())
+                bot_out_path = os.path.join(target_dir, self.bot_output_name.get().strip())
                 with open(bot_out_path, "w", encoding="utf-8", newline="") as f:
                     f.write(header_str)
                     for c in self.bot_components:
@@ -1673,9 +1687,13 @@ class NeoDenYY1App:
             msg = (
                 f"🎉 ĐÃ LƯU BẢN ĐÃ CHỈNH SỬA CHO MÁY NEODEN YY1!\n\n"
                 + "\n\n".join(report_items)
-                + "\n\nToàn bộ 13 thông số đã chỉnh sửa được lưu chính xác 100%!"
+                + "\n\nToàn bộ 13 thông số đã chỉnh sửa được lưu chính xác 100%.\nBạn có muốn mở thư mục chứa file vừa lưu?"
             )
-            messagebox.showinfo("Lưu Thành Công", msg)
+            if messagebox.askyesno("Lưu Thành Công", msg):
+                try:
+                    os.startfile(target_dir)
+                except Exception:
+                    pass
             
         except Exception as e:
             messagebox.showerror("Lỗi Xuất File", f"Chi tiết: {str(e)}")
