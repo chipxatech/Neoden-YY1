@@ -218,6 +218,7 @@ struct AppState {
     h_radio_top: HWND,
     h_radio_bot: HWND,
     font_main_title: HFONT,
+    font_main_bold: HFONT,
     font_main_sub: HFONT,
     font_splash_title: HFONT,
     font_splash_sub: HFONT,
@@ -242,6 +243,7 @@ static STATE: Mutex<AppState> = Mutex::new(AppState {
     h_radio_top: ptr::null_mut(),
     h_radio_bot: ptr::null_mut(),
     font_main_title: ptr::null_mut(),
+    font_main_bold: ptr::null_mut(),
     font_main_sub: ptr::null_mut(),
     font_splash_title: ptr::null_mut(),
     font_splash_sub: ptr::null_mut(),
@@ -333,6 +335,7 @@ unsafe extern "system" {
     fn GetModuleHandleW(lpModuleName: *const u16) -> HINSTANCE;
     fn SetFocus(hWnd: HWND) -> HWND;
     fn CallWindowProcW(lpPrevWndFunc: isize, hWnd: HWND, Msg: u32, wParam: usize, lParam: isize) -> isize;
+    fn GetDlgItem(hDlg: HWND, nIDDlgItem: i32) -> HWND;
 }
 
 fn to_wstr(s: &str) -> Vec<u16> {
@@ -946,6 +949,251 @@ fn start_in_place_edit(hwnd_lv: HWND, item: i32, sub_item: i32) {
     }
 }
 
+static FEEDER_MATRIX_RUST: Mutex<Option<std::collections::HashMap<i32, String>>> = Mutex::new(None);
+
+fn init_default_feeder_matrix_rust() {
+    let mut opt = FEEDER_MATRIX_RUST.lock().unwrap();
+    let mut map = std::collections::HashMap::new();
+    for i in 1..=50 {
+        map.insert(i, String::new());
+    }
+    // Bottom-Left 1..13
+    map.insert(1, "100nF".to_string());
+    map.insert(2, "10k".to_string());
+    map.insert(3, "1k".to_string());
+    map.insert(4, "4.7k".to_string());
+    map.insert(5, "0R".to_string());
+    map.insert(6, "22pF".to_string());
+    map.insert(7, "1uF".to_string());
+    map.insert(8, "10uF".to_string());
+    map.insert(9, "47uF".to_string());
+    map.insert(10, "LED_RED".to_string());
+    map.insert(11, "LED_GREEN".to_string());
+    map.insert(12, "100k".to_string());
+    map.insert(13, "2.2k".to_string());
+
+    // Bottom-Right 30..39
+    map.insert(30, "SS34".to_string());
+    map.insert(31, "1N4148".to_string());
+    map.insert(32, "S8050".to_string());
+    map.insert(33, "S8550".to_string());
+    map.insert(34, "AMS1117-3.3".to_string());
+    map.insert(35, "AMS1117-5.0".to_string());
+    map.insert(36, "BSS138".to_string());
+    map.insert(37, "AO3400".to_string());
+    map.insert(38, "AO3401".to_string());
+    map.insert(39, "CH340C".to_string());
+    *opt = Some(map);
+}
+
+fn match_feeder_slot_rust(cmt: &str, _fp: &str) -> i32 {
+    let cmt_clean = cmt.trim().to_lowercase();
+    if cmt_clean.is_empty() { return 1; }
+
+    let opt = FEEDER_MATRIX_RUST.lock().unwrap();
+    if let Some(ref map) = *opt {
+        for slot in 1..=50 {
+            if let Some(val) = map.get(&slot) {
+                let v_clean = val.trim().to_lowercase();
+                if !v_clean.is_empty() && (v_clean == cmt_clean || cmt_clean.contains(&v_clean) || v_clean.contains(&cmt_clean)) {
+                    return slot;
+                }
+            }
+        }
+    }
+    1
+}
+
+unsafe fn create_feeder_slot_control_rust(h_parent: HWND, slot: i32, x: i32, y: i32, val: &str) {
+    let hinst = GetModuleHandleW(ptr::null());
+    let font_bold = {
+        let state = STATE.lock().unwrap();
+        state.font_main_bold
+    };
+    let font_normal = {
+        let state = STATE.lock().unwrap();
+        state.font_main_sub
+    };
+
+    let lbl_text = to_wstr(&format!("Khay {:02}:", slot));
+    let h_lbl = CreateWindowExW(
+        0, to_wstr("STATIC").as_ptr(), lbl_text.as_ptr(),
+        0x50000002 /* WS_CHILD | WS_VISIBLE | SS_RIGHT */,
+        x, y + 2, 58, 20, h_parent, ptr::null_mut(), hinst, ptr::null_mut()
+    );
+    SendMessageW(h_lbl, 0x0030, font_bold as usize, 1);
+
+    let val_w = to_wstr(val);
+    let h_ed = CreateWindowExW(
+        0x00000200, to_wstr("EDIT").as_ptr(), val_w.as_ptr(),
+        0x50000080 /* WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL */,
+        x + 62, y, 145, 24, h_parent, (5000 + slot) as *mut _, hinst, ptr::null_mut()
+    );
+    SendMessageW(h_ed, 0x0030, font_normal as usize, 1);
+}
+
+unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize {
+    match msg {
+        0x0111 => { // WM_COMMAND
+            let id = (wparam & 0xFFFF) as u32;
+            if id == 1 || id == 2001 { // Lưu cấu hình
+                {
+                    let mut opt = FEEDER_MATRIX_RUST.lock().unwrap();
+                    if opt.is_none() {
+                        *opt = Some(std::collections::HashMap::new());
+                    }
+                    if let Some(ref mut map) = *opt {
+                        for slot in 1..=50 {
+                            let h_ed = GetDlgItem(hwnd, 5000 + slot);
+                            if !h_ed.is_null() {
+                                let mut buf = [0u16; 128];
+                                GetWindowTextW(h_ed, buf.as_mut_ptr(), 128);
+                                let s = from_wstr(buf.as_ptr());
+                                map.insert(slot, s);
+                            }
+                        }
+                    }
+                }
+
+                // Cập nhật lại số khay cho toàn bộ linh kiện
+                {
+                    let mut state = STATE.lock().unwrap();
+                    for c in state.top_components.iter_mut() {
+                        c.feeder_no = match_feeder_slot_rust(&c.comment, &c.footprint);
+                    }
+                    for c in state.bot_components.iter_mut() {
+                        c.feeder_no = match_feeder_slot_rust(&c.comment, &c.footprint);
+                    }
+                }
+                refresh_list_view();
+                MessageBoxW(hwnd, to_wstr("🎉 Đã lưu cấu hình 50 khay Feeder 4 góc và cập nhật bảng linh kiện thành công!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
+                DestroyWindow(hwnd);
+            } else if id == 2002 { // Khôi phục mặc định
+                if MessageBoxW(hwnd, to_wstr("Bạn có chắc muốn khôi phục lại nhãn 50 khay Feeder về mặc định ban đầu?").as_ptr(), to_wstr("Xác Nhận").as_ptr(), 0x00000020 | 0x00000004) == 6 {
+                    init_default_feeder_matrix_rust();
+                    let opt = FEEDER_MATRIX_RUST.lock().unwrap();
+                    if let Some(ref map) = *opt {
+                        for slot in 1..=50 {
+                            let h_ed = GetDlgItem(hwnd, 5000 + slot);
+                            if !h_ed.is_null() {
+                                let val = map.get(&slot).map(|s| s.as_str()).unwrap_or("");
+                                SetWindowTextW(h_ed, to_wstr(val).as_ptr());
+                            }
+                        }
+                    }
+                }
+            } else if id == 2 { // Cancel
+                DestroyWindow(hwnd);
+            }
+            0
+        }
+        0x0010 => { // WM_CLOSE
+            DestroyWindow(hwnd);
+            0
+        }
+        _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+    }
+}
+
+unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
+    let mut pr: RECT = std::mem::zeroed();
+    GetWindowRect(parent, &mut pr);
+    let dlg_w = 985;
+    let dlg_h = 765;
+    let dlg_x = pr.left + (pr.right - pr.left - dlg_w) / 2;
+    let dlg_y = pr.top + (pr.bottom - pr.top - dlg_h) / 2;
+
+    let hinst = GetModuleHandleW(ptr::null());
+    let h_dlg = CreateWindowExW(
+        0x00000001, to_wstr("#32770").as_ptr(), to_wstr("⚙️ Cấu Hình 50 Khay Feeder 4 Góc (NeoDen YY1)").as_ptr(),
+        0x80000000 | 0x00C00000 | 0x00080000 | 0x10000000,
+        dlg_x, dlg_y, dlg_w, dlg_h, parent, ptr::null_mut(), hinst, ptr::null_mut()
+    );
+    if h_dlg.is_null() { return; }
+
+    SetWindowLongPtrW(h_dlg, -4 /* DWLP_DLGPROC */, feeder_dlg_proc_rust as *const () as usize as isize);
+
+    let font_bold = {
+        let state = STATE.lock().unwrap();
+        state.font_main_bold
+    };
+    let font_normal = {
+        let state = STATE.lock().unwrap();
+        state.font_main_sub
+    };
+
+    let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 GÓC TRÊN BÊN TRÁI (Khay 14 → 24) ").as_ptr(), 0x50000007, 15, 10, 465, 305, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    SendMessageW(grp1, 0x0030, font_bold as usize, 1);
+
+    let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 GÓC TRÊN BÊN PHẢI (Khay 40 → 50) ").as_ptr(), 0x50000007, 495, 10, 465, 305, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    SendMessageW(grp2, 0x0030, font_bold as usize, 1);
+
+    let grp3 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 GÓC DƯỚI BÊN TRÁI (Khay 1 → 13) ").as_ptr(), 0x50000007, 15, 325, 465, 335, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    SendMessageW(grp3, 0x0030, font_bold as usize, 1);
+
+    let grp4 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 GÓC DƯỚI BÊN PHẢI (Khay 30 → 39) ").as_ptr(), 0x50000007, 495, 325, 465, 335, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    SendMessageW(grp4, 0x0030, font_bold as usize, 1);
+
+    let opt = FEEDER_MATRIX_RUST.lock().unwrap();
+
+    // 1. Góc Trên Trái: 14..24
+    for i in 0..6 {
+        let slot = 14 + i;
+        let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
+        create_feeder_slot_control_rust(h_dlg, slot, 25, 40 + i * 42, val);
+    }
+    for i in 0..5 {
+        let slot = 20 + i;
+        let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
+        create_feeder_slot_control_rust(h_dlg, slot, 245, 40 + i * 42, val);
+    }
+
+    // 2. Góc Trên Phải: 40..50
+    for i in 0..6 {
+        let slot = 40 + i;
+        let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
+        create_feeder_slot_control_rust(h_dlg, slot, 505, 40 + i * 42, val);
+    }
+    for i in 0..5 {
+        let slot = 46 + i;
+        let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
+        create_feeder_slot_control_rust(h_dlg, slot, 725, 40 + i * 42, val);
+    }
+
+    // 3. Góc Dưới Trái: 1..13
+    for i in 0..7 {
+        let slot = 1 + i;
+        let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
+        create_feeder_slot_control_rust(h_dlg, slot, 25, 355 + i * 40, val);
+    }
+    for i in 0..6 {
+        let slot = 8 + i;
+        let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
+        create_feeder_slot_control_rust(h_dlg, slot, 245, 355 + i * 40, val);
+    }
+
+    // 4. Góc Dưới Phải: 30..39
+    for i in 0..5 {
+        let slot = 30 + i;
+        let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
+        create_feeder_slot_control_rust(h_dlg, slot, 505, 355 + i * 40, val);
+    }
+    for i in 0..5 {
+        let slot = 35 + i;
+        let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
+        create_feeder_slot_control_rust(h_dlg, slot, 725, 355 + i * 40, val);
+    }
+
+    let btn_save = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("💾 LƯU CẤU HÌNH & ÁP DỤNG").as_ptr(), 0x50000001, 640, 670, 320, 42, h_dlg, 2001 as *mut _, hinst, ptr::null_mut());
+    SendMessageW(btn_save, 0x0030, font_bold as usize, 1);
+
+    let btn_reset = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("🔄 Khôi Phục Mặc Định").as_ptr(), 0x50000000, 430, 670, 200, 42, h_dlg, 2002 as *mut _, hinst, ptr::null_mut());
+    SendMessageW(btn_reset, 0x0030, font_normal as usize, 1);
+
+    let btn_cancel = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Đóng").as_ptr(), 0x50000000, 315, 670, 105, 42, h_dlg, 2 as *mut _, hinst, ptr::null_mut());
+    SendMessageW(btn_cancel, 0x0030, font_normal as usize, 1);
+}
+
 // Main Window Procedure
 unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize {
     match msg {
@@ -1133,6 +1381,9 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                 201 => { // Save & Export
                     save_outputs();
                 }
+                301 => { // Feeder Matrix Config Dialog
+                    open_feeder_matrix_dialog_rust(hwnd);
+                }
                 401 => { // Radio TOP
                     {
                         let mut state = STATE.lock().unwrap();
@@ -1269,11 +1520,15 @@ fn main() {
         }
 
         {
+            init_default_feeder_matrix_rust();
             let mut state = STATE.lock().unwrap();
             state.hwnd = hwnd;
 
             let font_normal = CreateFontW(15, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
             let font_bold = CreateFontW(15, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
+
+            let btn_feeder = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC").as_ptr(), 0x50000000, 1040, 14, 300, 38, hwnd, 301 as *mut _, hinst, ptr::null_mut());
+            SendMessageW(btn_feeder, 0x0030, font_bold as usize, 1);
 
             let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 1. File Altium Pick & Place Đầu Vào ").as_ptr(), 0x50000007, 20, 75, 1320, 70, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
             SendMessageW(grp1, 0x0030, font_bold as usize, 1);

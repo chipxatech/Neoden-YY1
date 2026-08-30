@@ -203,7 +203,7 @@ class FeederMatrixDialog(tk.Toplevel):
             r.pack(fill=tk.X)
             
             # Badge số khay
-            lbl_no = tk.Label(r, text=f"#{f_no}", width=5, font=("Segoe UI", 8, "bold"), fg="white", bg=tag_bg)
+            lbl_no = tk.Label(r, text=f"Khay {f_no:02d}:", width=8, font=("Segoe UI", 8, "bold"), fg="white", bg=tag_bg)
             lbl_no.pack(side=tk.LEFT, padx=1)
             
             e_cmt = tk.Entry(r, width=15, font=("Segoe UI", 8), bg="#0F172A", fg="#F8FAFC", insertbackground="white")

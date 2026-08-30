@@ -347,6 +347,204 @@ static LRESULT CALLBACK InPlaceEditProc(HWND hWnd, UINT message, WPARAM wParam, 
     return CallWindowProc(g_oldEditProc, hWnd, message, wParam, lParam);
 }
 
+typedef struct {
+    char comment[64];
+    char footprint[64];
+    int head;
+    int speed;
+} FeederSlotC;
+
+static FeederSlotC g_feeder_matrix_c[51];
+
+static void init_default_feeder_matrix_c(void) {
+    memset(g_feeder_matrix_c, 0, sizeof(g_feeder_matrix_c));
+    for (int i = 1; i <= 50; ++i) {
+        strcpy(g_feeder_matrix_c[i].footprint, "0603");
+        g_feeder_matrix_c[i].speed = 100;
+    }
+    // Bottom-Left 1..13
+    strcpy(g_feeder_matrix_c[1].comment, "100nF");
+    strcpy(g_feeder_matrix_c[2].comment, "10k");
+    strcpy(g_feeder_matrix_c[3].comment, "1k");
+    strcpy(g_feeder_matrix_c[4].comment, "4.7k");
+    strcpy(g_feeder_matrix_c[5].comment, "0R");
+    strcpy(g_feeder_matrix_c[6].comment, "22pF");
+    strcpy(g_feeder_matrix_c[7].comment, "1uF");
+    strcpy(g_feeder_matrix_c[8].comment, "10uF"); strcpy(g_feeder_matrix_c[8].footprint, "0805");
+    strcpy(g_feeder_matrix_c[9].comment, "47uF"); strcpy(g_feeder_matrix_c[9].footprint, "0805");
+    strcpy(g_feeder_matrix_c[10].comment, "LED_RED");
+    strcpy(g_feeder_matrix_c[11].comment, "LED_GREEN");
+    strcpy(g_feeder_matrix_c[12].comment, "100k");
+    strcpy(g_feeder_matrix_c[13].comment, "2.2k");
+
+    // Bottom-Right 30..39
+    strcpy(g_feeder_matrix_c[30].comment, "SS34"); strcpy(g_feeder_matrix_c[30].footprint, "SMA");
+    strcpy(g_feeder_matrix_c[31].comment, "1N4148"); strcpy(g_feeder_matrix_c[31].footprint, "SOD-123");
+    strcpy(g_feeder_matrix_c[32].comment, "S8050"); strcpy(g_feeder_matrix_c[32].footprint, "SOT-23");
+    strcpy(g_feeder_matrix_c[33].comment, "S8550"); strcpy(g_feeder_matrix_c[33].footprint, "SOT-23");
+    strcpy(g_feeder_matrix_c[34].comment, "AMS1117-3.3"); strcpy(g_feeder_matrix_c[34].footprint, "SOT-223"); g_feeder_matrix_c[34].speed = 90;
+    strcpy(g_feeder_matrix_c[35].comment, "AMS1117-5.0"); strcpy(g_feeder_matrix_c[35].footprint, "SOT-223"); g_feeder_matrix_c[35].speed = 90;
+    strcpy(g_feeder_matrix_c[36].comment, "BSS138"); strcpy(g_feeder_matrix_c[36].footprint, "SOT-23");
+    strcpy(g_feeder_matrix_c[37].comment, "AO3400"); strcpy(g_feeder_matrix_c[37].footprint, "SOT-23");
+    strcpy(g_feeder_matrix_c[38].comment, "AO3401"); strcpy(g_feeder_matrix_c[38].footprint, "SOT-23");
+    strcpy(g_feeder_matrix_c[39].comment, "CH340C"); strcpy(g_feeder_matrix_c[39].footprint, "SOP-16"); g_feeder_matrix_c[39].speed = 90;
+}
+
+static int match_feeder_slot_c(const char* cmt, const char* fp) {
+    if (!cmt || !cmt[0]) return 1;
+    char cmt_lower[64];
+    strncpy(cmt_lower, cmt, sizeof(cmt_lower) - 1);
+    cmt_lower[sizeof(cmt_lower) - 1] = '\0';
+    for (int i = 0; cmt_lower[i]; i++) cmt_lower[i] = (char)tolower(cmt_lower[i]);
+
+    for (int slot = 1; slot <= 50; ++slot) {
+        if (g_feeder_matrix_c[slot].comment[0]) {
+            char f_lower[64];
+            strncpy(f_lower, g_feeder_matrix_c[slot].comment, sizeof(f_lower) - 1);
+            f_lower[sizeof(f_lower) - 1] = '\0';
+            for (int i = 0; f_lower[i]; i++) f_lower[i] = (char)tolower(f_lower[i]);
+            if (strcmp(f_lower, cmt_lower) == 0 || strstr(cmt_lower, f_lower) || strstr(f_lower, cmt_lower)) {
+                return slot;
+            }
+        }
+    }
+    return 1;
+}
+
+static void create_feeder_slot_control_c(HWND hParent, int slot, int x, int y, const char* val) {
+    wchar_t lblText[32];
+    swprintf(lblText, 32, L"Khay %02d:", slot);
+    HWND hLbl = CreateWindowExW(0, L"STATIC", lblText, WS_CHILD | WS_VISIBLE | SS_RIGHT, x, y + 2, 58, 20, hParent, NULL, g_hInst, NULL);
+    SendMessageW(hLbl, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+    wchar_t w_val[128];
+    MultiByteToWideChar(CP_UTF8, 0, val, -1, w_val, 128);
+    HWND hEd = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", w_val, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, x + 62, y, 145, 24, hParent, (HMENU)(INT_PTR)(5000 + slot), g_hInst, NULL);
+    SendMessageW(hEd, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
+}
+
+static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    switch (message) {
+    case WM_COMMAND: {
+        int wmId = LOWORD(wParam);
+        if (wmId == IDOK || wmId == 2001) {
+            for (int slot = 1; slot <= 50; ++slot) {
+                HWND hEd = GetDlgItem(hWnd, 5000 + slot);
+                if (hEd) {
+                    wchar_t buf[128] = {0};
+                    GetWindowTextW(hEd, buf, 128);
+                    WideCharToMultiByte(CP_UTF8, 0, buf, -1, g_feeder_matrix_c[slot].comment, sizeof(g_feeder_matrix_c[slot].comment), NULL, NULL);
+                }
+            }
+
+            for (size_t i = 0; i < g_components.count; ++i) {
+                g_components.items[i].feeder_no = match_feeder_slot_c(g_components.items[i].comment, g_components.items[i].footprint);
+            }
+            refresh_list_view();
+            MessageBoxW(hWnd, L"🎉 Đã lưu cấu hình 50 khay Feeder 4 góc và cập nhật bảng linh kiện thành công!", L"Thành Công", MB_ICONINFORMATION);
+            DestroyWindow(hWnd);
+        } else if (wmId == 2002) {
+            if (MessageBoxW(hWnd, L"Bạn có chắc muốn khôi phục lại nhãn 50 khay Feeder về mặc định ban đầu?", L"Xác Nhận", MB_ICONQUESTION | MB_YESNO) == IDYES) {
+                init_default_feeder_matrix_c();
+                for (int slot = 1; slot <= 50; ++slot) {
+                    HWND hEd = GetDlgItem(hWnd, 5000 + slot);
+                    if (hEd) {
+                        wchar_t w_val[128];
+                        MultiByteToWideChar(CP_UTF8, 0, g_feeder_matrix_c[slot].comment, -1, w_val, 128);
+                        SetWindowTextW(hEd, w_val);
+                    }
+                }
+            }
+        } else if (wmId == IDCANCEL) {
+            DestroyWindow(hWnd);
+        }
+        break;
+    }
+    case WM_CLOSE:
+        DestroyWindow(hWnd);
+        break;
+    default:
+        return DefWindowProcW(hWnd, message, wParam, lParam);
+    }
+    return 0;
+}
+
+static void open_feeder_matrix_dialog_c(HWND parent) {
+    RECT pr;
+    GetWindowRect(parent, &pr);
+    int dlgW = 985, dlgH = 765;
+    int dlgX = pr.left + (pr.right - pr.left - dlgW) / 2;
+    int dlgY = pr.top + (pr.bottom - pr.top - dlgH) / 2;
+
+    HWND hDlg = CreateWindowExW(WS_EX_DLGMODALFRAME, L"#32770", L"⚙️ Cấu Hình 50 Khay Feeder 4 Góc (NeoDen YY1)",
+                               WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+                               dlgX, dlgY, dlgW, dlgH, parent, NULL, g_hInst, NULL);
+    if (!hDlg) return;
+
+    SetWindowLongPtr(hDlg, DWLP_DLGPROC, (LONG_PTR)FeederDlgProcC);
+
+    HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" 📌 GÓC TRÊN BÊN TRÁI (Khay 14 → 24) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 10, 465, 305, hDlg, NULL, g_hInst, NULL);
+    SendMessageW(hGrp1, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+    HWND hGrp2 = CreateWindowExW(0, L"BUTTON", L" 📌 GÓC TRÊN BÊN PHẢI (Khay 40 → 50) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 495, 10, 465, 305, hDlg, NULL, g_hInst, NULL);
+    SendMessageW(hGrp2, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+    HWND hGrp3 = CreateWindowExW(0, L"BUTTON", L" 📌 GÓC DƯỚI BÊN TRÁI (Khay 1 → 13) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 325, 465, 335, hDlg, NULL, g_hInst, NULL);
+    SendMessageW(hGrp3, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+    HWND hGrp4 = CreateWindowExW(0, L"BUTTON", L" 📌 GÓC DƯỚI BÊN PHẢI (Khay 30 → 39) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 495, 325, 465, 335, hDlg, NULL, g_hInst, NULL);
+    SendMessageW(hGrp4, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+    // 1. Góc Trên Trái: 14..24
+    for (int i = 0; i < 6; ++i) {
+        int slot = 14 + i;
+        create_feeder_slot_control_c(hDlg, slot, 25, 40 + i * 42, g_feeder_matrix_c[slot].comment);
+    }
+    for (int i = 0; i < 5; ++i) {
+        int slot = 20 + i;
+        create_feeder_slot_control_c(hDlg, slot, 245, 40 + i * 42, g_feeder_matrix_c[slot].comment);
+    }
+
+    // 2. Góc Trên Phải: 40..50
+    for (int i = 0; i < 6; ++i) {
+        int slot = 40 + i;
+        create_feeder_slot_control_c(hDlg, slot, 505, 40 + i * 42, g_feeder_matrix_c[slot].comment);
+    }
+    for (int i = 0; i < 5; ++i) {
+        int slot = 46 + i;
+        create_feeder_slot_control_c(hDlg, slot, 725, 40 + i * 42, g_feeder_matrix_c[slot].comment);
+    }
+
+    // 3. Góc Dưới Trái: 1..13
+    for (int i = 0; i < 7; ++i) {
+        int slot = 1 + i;
+        create_feeder_slot_control_c(hDlg, slot, 25, 355 + i * 40, g_feeder_matrix_c[slot].comment);
+    }
+    for (int i = 0; i < 6; ++i) {
+        int slot = 8 + i;
+        create_feeder_slot_control_c(hDlg, slot, 245, 355 + i * 40, g_feeder_matrix_c[slot].comment);
+    }
+
+    // 4. Góc Dưới Phải: 30..39
+    for (int i = 0; i < 5; ++i) {
+        int slot = 30 + i;
+        create_feeder_slot_control_c(hDlg, slot, 505, 355 + i * 40, g_feeder_matrix_c[slot].comment);
+    }
+    for (int i = 0; i < 5; ++i) {
+        int slot = 35 + i;
+        create_feeder_slot_control_c(hDlg, slot, 725, 355 + i * 40, g_feeder_matrix_c[slot].comment);
+    }
+
+    HWND hBtnSave = CreateWindowExW(0, L"BUTTON", L"💾 LƯU CẤU HÌNH & ÁP DỤNG", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 640, 670, 320, 42, hDlg, (HMENU)2001, g_hInst, NULL);
+    SendMessageW(hBtnSave, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+    HWND hBtnReset = CreateWindowExW(0, L"BUTTON", L"🔄 Khôi Phục Mặc Định", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 430, 670, 200, 42, hDlg, (HMENU)2002, g_hInst, NULL);
+    SendMessageW(hBtnReset, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
+
+    HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"Đóng", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 315, 670, 105, 42, hDlg, (HMENU)IDCANCEL, g_hInst, NULL);
+    SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
+}
+
 static void start_in_place_edit(int item, int sub_item) {
     if (item < 0 || sub_item < 1 || sub_item > 12) return;
     commit_in_place_edit(true);
@@ -378,10 +576,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     switch (message) {
     case WM_CREATE: {
         component_list_init(&g_components);
+        init_default_feeder_matrix_c();
 
         g_hFontTitle = CreateFontW(22, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         g_hFontBold = CreateFontW(15, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         g_hFontNormal = CreateFontW(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+
+        HWND hBtnFeeder = CreateWindowExW(0, L"BUTTON", L"⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1040, 14, 300, 38, hWnd, (HMENU)301, g_hInst, NULL);
+        SendMessageW(hBtnFeeder, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" 1. File Altium Pick & Place Dau Vao ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 75, 1320, 70, hWnd, NULL, g_hInst, NULL);
         SendMessageW(hGrp1, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
@@ -583,6 +785,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         case 201: {
             on_save_clicked();
+            break;
+        }
+        case 301: {
+            open_feeder_matrix_dialog_c(hWnd);
             break;
         }
         case 401: {
