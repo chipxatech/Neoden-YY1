@@ -616,7 +616,7 @@ class NeoDenYY1App:
         )
         chk_match.pack(side=tk.LEFT, padx=15)
         
-        self.board_width_var = tk.StringVar(value="0.00")
+        self.board_width_var = tk.StringVar(value="")
         self.board_width_var.trace_add("write", lambda *args: self.on_board_width_changed())
         tk.Label(tb_bar, text="Chiều rộng bo X (mm):", font=("Segoe UI", 9, "bold"), fg="#F8FAFC", bg=card_bg).pack(side=tk.LEFT, padx=(10, 2))
         self.entry_bw = tk.Entry(tb_bar, textvariable=self.board_width_var, width=8, font=("Segoe UI", 9, "bold"), justify=tk.CENTER)
@@ -791,10 +791,13 @@ class NeoDenYY1App:
     def recalc_bottom_coordinates(self):
         if not hasattr(self, 'board_width_var') or not hasattr(self, 'bot_components'):
             return
-        try:
-            bw = float(self.board_width_var.get().strip())
-        except Exception:
-            bw = 0.0
+        val_str = self.board_width_var.get().strip()
+        bw = 0.0
+        if val_str:
+            try:
+                bw = float(val_str)
+            except Exception:
+                bw = 0.0
             
         for c in self.bot_components:
             raw_x = c.get("raw_mid_x", c.get("mid_x", 0.0))

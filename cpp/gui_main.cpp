@@ -635,13 +635,19 @@ static bool isValidComponentCpp(const std::wstring& des, const std::wstring& cmt
 }
 
 static void recalcBottomCoordinates() {
-    wchar_t buf[64] = {0};
+    g_board_width = 0.0;
     if (g_hEditBoardWidth) {
+        wchar_t buf[64] = {0};
         GetWindowTextW(g_hEditBoardWidth, buf, 64);
-        try {
-            g_board_width = _wtof(buf);
-        } catch (...) {
-            g_board_width = 0.0;
+        std::wstring s = buf;
+        while (!s.empty() && (s.front() == L' ' || s.front() == L'\t')) s.erase(s.begin());
+        while (!s.empty() && (s.back() == L' ' || s.back() == L'\t')) s.pop_back();
+        if (!s.empty()) {
+            try {
+                g_board_width = std::stod(s);
+            } catch (...) {
+                g_board_width = 0.0;
+            }
         }
     }
     for (auto& c : g_bot_components) {
@@ -1448,7 +1454,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         HWND hLblBw = CreateWindowExW(0, L"STATIC", L"Chiều rộng bo X (mm):", WS_CHILD | WS_VISIBLE, 520, 183, 155, 20, hWnd, NULL, g_hInst, NULL);
         SendMessageW(hLblBw, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        g_hEditBoardWidth = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"0.00", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 680, 180, 75, 24, hWnd, (HMENU)303, g_hInst, NULL);
+        g_hEditBoardWidth = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 680, 180, 75, 24, hWnd, (HMENU)303, g_hInst, NULL);
         SendMessageW(g_hEditBoardWidth, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 765, 183, 560, 20, hWnd, (HMENU)104, g_hInst, NULL);

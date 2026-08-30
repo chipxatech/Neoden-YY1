@@ -730,19 +730,19 @@ fn recalc_bottom_coordinates_rust() {
         let state = STATE.lock().unwrap();
         state.h_edit_board_width
     };
-    let mut parsed_bw = None;
+    let mut bw_val = 0.0;
     if !hwnd_bw.is_null() {
         let mut buf = [0u16; 64];
         unsafe {
             GetWindowTextW(hwnd_bw, buf.as_mut_ptr(), 64);
         }
         let s = String::from_utf16_lossy(&buf).trim_matches('\0').trim().to_string();
-        parsed_bw = s.parse::<f64>().ok();
+        if !s.is_empty() {
+            bw_val = s.parse::<f64>().unwrap_or(0.0);
+        }
     }
     let mut state = STATE.lock().unwrap();
-    if let Some(val) = parsed_bw {
-        state.board_width = val;
-    }
+    state.board_width = if bw_val > 0.0 { bw_val } else { 0.0 };
     let bw = state.board_width;
     for c in &mut state.bot_components {
         if bw > 0.0 {
@@ -2157,7 +2157,7 @@ fn main() {
         let lbl_bw = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chiều rộng bo X (mm):").as_ptr(), 0x50000000, 520, 183, 155, 20, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
         SendMessageW(lbl_bw, 0x0030, font_bold as usize, 1);
 
-        let h_edit_board_width = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("0.00").as_ptr(), 0x50000080, 680, 180, 75, 24, hwnd, 303 as *mut _, hinst, ptr::null_mut());
+        let h_edit_board_width = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("").as_ptr(), 0x50000080, 680, 180, 75, 24, hwnd, 303 as *mut _, hinst, ptr::null_mut());
         SendMessageW(h_edit_board_width, 0x0030, font_bold as usize, 1);
 
         let h_status = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chưa chọn file CAD nào").as_ptr(), 0x50000000, 765, 183, 560, 20, hwnd, 104 as *mut _, hinst, ptr::null_mut());

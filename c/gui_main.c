@@ -64,10 +64,13 @@ bool g_showing_top = true;
 ComponentList g_components;
 
 static void recalc_bottom_coordinates_c(void) {
-    wchar_t buf[64] = {0};
+    g_board_width_c = 0.0;
     if (g_hEditBoardWidth_c) {
+        wchar_t buf[64] = {0};
         GetWindowTextW(g_hEditBoardWidth_c, buf, 64);
-        g_board_width_c = _wtof(buf);
+        if (buf[0] != L'\0') {
+            g_board_width_c = _wtof(buf);
+        }
     }
     for (size_t i = 0; i < g_components.count; ++i) {
         Component* c = &g_components.items[i];
@@ -1106,7 +1109,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         HWND hLblBw = CreateWindowExW(0, L"STATIC", L"Chiều rộng bo X (mm):", WS_CHILD | WS_VISIBLE, 520, 183, 155, 20, hWnd, NULL, g_hInst, NULL);
         SendMessageW(hLblBw, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        g_hEditBoardWidth_c = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"0.00", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 680, 180, 75, 24, hWnd, (HMENU)303, g_hInst, NULL);
+        g_hEditBoardWidth_c = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 680, 180, 75, 24, hWnd, (HMENU)303, g_hInst, NULL);
         SendMessageW(g_hEditBoardWidth_c, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 765, 183, 560, 20, hWnd, (HMENU)104, g_hInst, NULL);
