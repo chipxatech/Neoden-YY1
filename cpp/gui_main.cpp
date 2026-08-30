@@ -511,6 +511,28 @@ bool loadAltiumData(const std::wstring& filepath) {
             continue;
         }
 
+static bool isValidComponentCpp(const std::wstring& des, const std::wstring& cmt) {
+    if (des.empty() || des[0] == L'*' || des[0] == L'#' || des[0] == L';') return false;
+    std::wstring d_clean = cleanColName(des);
+    if (d_clean == L"designator" || d_clean == L"refdes" || d_clean == L"pattern" || d_clean == L"footprint") return false;
+
+    std::wstring d = toLower(des);
+    if (d.find(L"http:") != std::wstring::npos || d.find(L"https:") != std::wstring::npos || d.find(L"www.") != std::wstring::npos ||
+        d.find(L"snapeda") != std::wstring::npos || d.find(L"://") != std::wstring::npos || d.find(L".com") != std::wstring::npos ||
+        d.find(L".org") != std::wstring::npos || d.find(L".net") != std::wstring::npos || d.find(L"copyright") != std::wstring::npos ||
+        d.find(L"all rights") != std::wstring::npos || d.find(L"license") != std::wstring::npos) {
+        return false;
+    }
+    if (des.length() > 30 || des.find(L'/') != std::wstring::npos || des.find(L'\\') != std::wstring::npos) return false;
+
+    std::wstring c = toLower(cmt);
+    if (c.find(L"snapeda") != std::wstring::npos || c.find(L"view-part") != std::wstring::npos ||
+        c.find(L"http://") != std::wstring::npos || c.find(L"https://") != std::wstring::npos || c.find(L"www.") != std::wstring::npos) {
+        return false;
+    }
+    return true;
+}
+
         auto fields = parseCsvLine(line);
         auto get_val = [&](int idx) -> std::wstring {
             if (idx >= 0 && idx < (int)fields.size()) return fields[idx];
@@ -518,12 +540,12 @@ bool loadAltiumData(const std::wstring& filepath) {
         };
 
         std::wstring des = get_val(col_des);
-        if (des.empty() || des[0] == L'*' || des[0] == L'#' || des[0] == L';') continue;
-        if (cleanColName(des) == L"designator" || cleanColName(des) == L"refdes") continue;
+        std::wstring raw_cmt = get_val(col_cmt);
+        if (!isValidComponentCpp(des, raw_cmt)) continue;
 
         Component comp;
         comp.designator = des;
-        comp.comment = normalizeComment(get_val(col_cmt));
+        comp.comment = normalizeComment(raw_cmt);
         comp.footprint = normalizeFootprint(get_val(col_fp));
 
         std::wstring raw_layer = toLower(get_val(col_layer));
@@ -1506,10 +1528,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     if (item >= 0 && item < (int)list.size()) {
                         if (subItem == 8) { // Cột FeederNo
                             if (list[item].feeder_no == 0) {
-                                // CHƯA CÓ FEEDER / CHƯA NHẬN DIỆN ĐƯỢC (0): Khối Màu Đỏ Nổi Bật Cảnh Báo, Chữ Trắng
+                                // CHƯA CÓ FEEDER (0): Khối Màu Đỏ Nổi Bật Cảnh Báo, Chữ Trắng
                                 lplvcd->nmcd.uItemState &= ~(CDIS_SELECTED | CDIS_FOCUS | CDIS_HOT);
                                 lplvcd->clrTextBk = RGB(220, 38, 38);
                                 lplvcd->clrText = RGB(255, 255, 255);
+                            } else {
+                                lplvcd->clrTextBk = RGB(255, 255, 255);
+                                lplvcd->clrText = RGB(30, 41, 59);
                             }
                         } else if (subItem == 13) { // Cột Skip
                             lplvcd->nmcd.uItemState &= ~(CDIS_SELECTED | CDIS_FOCUS | CDIS_HOT);
@@ -1522,6 +1547,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                                 lplvcd->clrTextBk = RGB(22, 163, 74); // #16A34A (Màu Xanh Lá Cây)
                                 lplvcd->clrText = RGB(255, 255, 255);
                             }
+                        } else {
+                            // CÁC CỘT KHÁC (0..7, 9..12): MÀU TRẮNG MẶC ĐỊNH KHÔNG BỊ LOANG ĐỎ
+                            lplvcd->clrTextBk = RGB(255, 255, 255);
+                            lplvcd->clrText = RGB(30, 41, 59);
                         }
                     }
                     return CDRF_DODEFAULT;

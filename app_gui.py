@@ -879,6 +879,25 @@ class NeoDenYY1App:
         prefix = re.sub(r'\d+', '', des)
         return (cmt, prefix, num, des)
 
+    def is_valid_component(self, des, cmt):
+        if not des or des.startswith("*") or des.startswith("#") or des.startswith(";"):
+            return False
+        d_clean = self.clean_col_name(des)
+        if d_clean in ["designator", "refdes", "pattern", "footprint"]:
+            return False
+            
+        d = des.lower()
+        if any(bad in d for bad in ["http:", "https:", "www.", "snapeda", "://", ".com", ".org", ".net", "copyright", "all rights", "license"]):
+            return False
+        if len(des) > 30 or "/" in des or "\\" in des:
+            return False
+            
+        c = str(cmt).lower()
+        if any(bad in c for bad in ["snapeda", "view-part", "http://", "https://", "www."]):
+            return False
+            
+        return True
+
     def extract_tokens(self, text):
         can = self.canonicalize_feeder_keywords(str(text))
         tokens = []
@@ -1050,12 +1069,10 @@ class NeoDenYY1App:
                     continue
                     
                 des = parts[col_map["designator"]].strip()
-                if not des or des.startswith("*") or des.startswith("#") or des.startswith(";"):
-                    continue
-                if self.clean_col_name(des) in ["designator", "refdes"]:
+                cmt_raw = parts[col_map["comment"]].strip() if "comment" in col_map and col_map["comment"] < len(parts) else ""
+                if not self.is_valid_component(des, cmt_raw):
                     continue
                     
-                cmt_raw = parts[col_map["comment"]].strip() if "comment" in col_map and col_map["comment"] < len(parts) else ""
                 fp_raw = parts[col_map["footprint"]].strip() if "footprint" in col_map and col_map["footprint"] < len(parts) else "0603D"
                 layer_raw = parts[col_map["layer"]].strip().lower() if "layer" in col_map and col_map["layer"] < len(parts) else "toplayer"
                 

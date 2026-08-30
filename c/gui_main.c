@@ -1198,10 +1198,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             if ((int)match_idx == item) {
                                 if (subItem == 8) { // Cột FeederNo
                                     if (c->feeder_no == 0) {
-                                        // CHƯA CÓ FEEDER / CHƯA NHẬN DIỆN ĐƯỢC (0): Khối Màu Đỏ Nổi Bật Cảnh Báo, Chữ Trắng
+                                        // CHƯA CÓ FEEDER (0): Khối Màu Đỏ Nổi Bật Cảnh Báo, Chữ Trắng
                                         lplvcd->nmcd.uItemState &= ~(CDIS_SELECTED | CDIS_FOCUS | CDIS_HOT);
                                         lplvcd->clrTextBk = RGB(220, 38, 38);
                                         lplvcd->clrText = RGB(255, 255, 255);
+                                    } else {
+                                        lplvcd->clrTextBk = RGB(255, 255, 255);
+                                        lplvcd->clrText = RGB(30, 41, 59);
                                     }
                                 } else if (subItem == 13) { // Cột Skip
                                     lplvcd->nmcd.uItemState &= ~(CDIS_SELECTED | CDIS_FOCUS | CDIS_HOT);
@@ -1214,6 +1217,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                                         lplvcd->clrTextBk = RGB(22, 163, 74); // #16A34A (Màu Xanh Lá Cây)
                                         lplvcd->clrText = RGB(255, 255, 255);
                                     }
+                                } else {
+                                    // CÁC CỘT KHÁC (0..7, 9..12): MÀU TRẮNG MẶC ĐỊNH KHÔNG BỊ LOANG ĐỎ
+                                    lplvcd->clrTextBk = RGB(255, 255, 255);
+                                    lplvcd->clrText = RGB(30, 41, 59);
                                 }
                                 break;
                             }

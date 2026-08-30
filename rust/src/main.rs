@@ -596,14 +596,32 @@ fn parse_altium_data(filepath: &str) -> bool {
             continue;
         }
 
+fn is_valid_component_rust(des: &str, cmt: &str) -> bool {
+    if des.is_empty() || des.starts_with('*') || des.starts_with('#') || des.starts_with(';') { return false; }
+    let d_clean = clean_col_name(des);
+    if ["designator", "refdes", "pattern", "footprint"].contains(&d_clean.as_str()) { return false; }
+
+    let d = des.to_lowercase();
+    if d.contains("http:") || d.contains("https:") || d.contains("www.") || d.contains("snapeda") || d.contains("://") ||
+       d.contains(".com") || d.contains(".org") || d.contains(".net") || d.contains("copyright") || d.contains("all rights") || d.contains("license") {
+        return false;
+    }
+    if des.len() > 30 || des.contains('/') || des.contains('\\') { return false; }
+
+    let c = cmt.to_lowercase();
+    if c.contains("snapeda") || c.contains("view-part") || c.contains("http://") || c.contains("https://") || c.contains("www.") {
+        return false;
+    }
+    true
+}
+
         let parts = parse_csv_line_rust(l_trim);
         if let Some(&des_idx) = col_map.get("des") {
             if des_idx >= parts.len() { continue; }
             let des = &parts[des_idx];
-            if des.is_empty() || des.starts_with('*') || des.starts_with('#') || des.starts_with(';') { continue; }
-            if ["designator", "refdes"].contains(&clean_col_name(des).as_str()) { continue; }
-
             let cmt_raw = col_map.get("cmt").and_then(|&i| parts.get(i)).map(|s| s.as_str()).unwrap_or("");
+            if !is_valid_component_rust(des, cmt_raw) { continue; }
+
             let fp_raw = col_map.get("fp").and_then(|&i| parts.get(i)).filter(|s| !s.is_empty()).map(|s| s.as_str()).unwrap_or("0603D");
             let layer_raw = col_map.get("layer").and_then(|&i| parts.get(i)).map(|s| s.as_str()).unwrap_or("TopLayer");
 
@@ -1732,11 +1750,16 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                             };
                             if sub_item == 8 { // Cột FeederNo
                                 if feeder_no == 0 {
-                                    // CHƯA CÓ FEEDER / CHƯA NHẬN DIỆN ĐƯỢC (0): Khối Màu Đỏ Nổi Bật Cảnh Báo, Chữ Trắng
+                                    // CHƯA CÓ FEEDER (0): Khối Màu Đỏ Nổi Bật Cảnh Báo, Chữ Trắng
                                     unsafe {
                                         (*pcustom).nmcd.u_item_state &= !(0x00000001 | 0x00000010 | 0x00000040);
                                         (*pcustom).clr_text_bk = 0x002626DC; // BGR for RGB(220, 38, 38)
                                         (*pcustom).clr_text = 0x00FFFFFF;
+                                    }
+                                } else {
+                                    unsafe {
+                                        (*pcustom).clr_text_bk = 0x00FFFFFF;
+                                        (*pcustom).clr_text = 0x003B291E;
                                     }
                                 }
                             } else if sub_item == 13 { // Cột Skip
@@ -1751,6 +1774,11 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                                         (*pcustom).clr_text_bk = 0x004AA316; // BGR for RGB(22, 163, 74)
                                         (*pcustom).clr_text = 0x00FFFFFF;
                                     }
+                                }
+                            } else {
+                                unsafe {
+                                    (*pcustom).clr_text_bk = 0x00FFFFFF;
+                                    (*pcustom).clr_text = 0x003B291E;
                                 }
                             }
                             return 0x00000000;
