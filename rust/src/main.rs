@@ -450,11 +450,29 @@ fn refresh_list_view() {
             set_sub(13, &format!("{}", c.skip));
         }
 
-        let status_txt = format!(
-            "Mặt TOP: {} pcs  |  Mặt BOTTOM: {} pcs  |  Đang xem: {} ({} pcs)  |  Nhấp đúp chuột để sửa",
-            top_len, bot_len,
-            if showing_top { "TOP" } else { "BOTTOM" }, list.len()
-        );
+        let origin_type = {
+            let state = STATE.lock().unwrap();
+            state.origin_type
+        };
+        let status_txt = if top_len == 0 && bot_len == 0 {
+            "Chưa chọn file CAD nào".to_string()
+        } else {
+            let origin_str = match origin_type {
+                OriginTypeRust::BottomLeft => "✅ FILE HỢP LỆ | 📍 Gốc: DƯỚI-TRÁI (X>=0, Y>=0)",
+                OriginTypeRust::BottomRight => "✅ FILE HỢP LỆ | 📍 Gốc: DƯỚI-PHẢI (X<=0, Y>=0)",
+                _ => "⚠️ FILE KHÔNG HỢP LỆ (Gốc ở giữa/trong/trên mạch)",
+            };
+            let layer_str = if top_len > 0 && bot_len > 0 {
+                format!("📦 2 Mặt (TOP: {} LK, BOT: {} LK)", top_len, bot_len)
+            } else if top_len > 0 {
+                format!("📦 Chỉ có TOP ({} LK)", top_len)
+            } else if bot_len > 0 {
+                format!("📦 Chỉ có BOT ({} LK)", bot_len)
+            } else {
+                "📦 0 LK".to_string()
+            };
+            format!("{} | {} | Đang xem: {}", origin_str, layer_str, if showing_top { "Mặt TOP" } else { "Mặt BOT" })
+        };
         let w_status = to_wstr(&status_txt);
         SetWindowTextW(hwnd_status, w_status.as_ptr());
     }
@@ -930,11 +948,36 @@ fn update_layer_and_origin_ui_rust() {
             SetWindowTextW(h_status, to_wstr(&status_txt).as_ptr());
         }
 
-        if origin_type == OriginTypeRust::Invalid {
+        if origin_type == OriginTypeRust::BottomLeft {
+            let msg = format!(
+                "🎉 KẾT QUẢ NHẬN DIỆN FILE:\n\n\
+                ✔ Tình trạng file: HỢP LỆ (Gốc Chuẩn NeoDen YY1)\n\
+                📍 Vị trí gốc tọa độ: GÓC DƯỚI BÊN TRÁI (Bottom-Left: X >= 0, Y >= 0)\n\n\
+                📦 Dữ liệu phát hiện:\n\
+                • Mặt TOP: {} linh kiện (tọa độ giữ nguyên)\n\
+                • Mặt BOTTOM: {} linh kiện (tự động tính X_bot = Chiều_Rộng - X)\n\n\
+                Toàn bộ 13 thông số máy NeoDen YY1 đã được nạp sẵn sàng!",
+                top_len, bot_len
+            );
+            MessageBoxW(hwnd, to_wstr(&msg).as_ptr(), to_wstr("Nhận Diện File Thành Công").as_ptr(), 0x0040 /* MB_ICONINFORMATION */);
+        } else if origin_type == OriginTypeRust::BottomRight {
+            let msg = format!(
+                "🎉 KẾT QUẢ NHẬN DIỆN FILE:\n\n\
+                ✔ Tình trạng file: HỢP LỆ (Gốc Chuẩn NeoDen YY1)\n\
+                📍 Vị trí gốc tọa độ: GÓC DƯỚI BÊN PHẢI (Bottom-Right: X <= 0, Y >= 0)\n\n\
+                📦 Dữ liệu phát hiện:\n\
+                • Mặt BOTTOM: {} linh kiện (tọa độ dương hóa |X|)\n\
+                • Mặt TOP: {} linh kiện (tự động tính X_top = Chiều_Rộng + X)\n\n\
+                Toàn bộ 13 thông số máy NeoDen YY1 đã được nạp sẵn sàng!",
+                bot_len, top_len
+            );
+            MessageBoxW(hwnd, to_wstr(&msg).as_ptr(), to_wstr("Nhận Diện File Thành Công").as_ptr(), 0x0040 /* MB_ICONINFORMATION */);
+        } else if origin_type == OriginTypeRust::Invalid {
             let warn_msg = to_wstr(
                 "⚠️ CẢNH BÁO FILE KHÔNG HỢP LỆ:\n\n\
-                Gốc tọa độ của file hiện tại đang được đặt ở GIỮA MẠCH, TRÊN MẠCH hoặc TRONG MẠCH!\n\n\
-                📌 Quy chuẩn máy NeoDen YY1:\n\
+                ❌ Tình trạng: Gốc tọa độ đang đặt ở GIỮA MẠCH, TRONG MẠCH hoặc TRÊN MẠCH!\n\
+                   (Phát hiện tọa độ X vừa có số âm vừa có số dương, hoặc trục Y mang giá trị âm)\n\n\
+                📌 Quy chuẩn máy dán NeoDen YY1:\n\
                 - Gốc hợp lệ 1: Góc Dưới Bên Trái (toàn bộ X >= 0, Y >= 0)\n\
                 - Gốc hợp lệ 2: Góc Dưới Bên Phải (toàn bộ X <= 0, Y >= 0)\n\n\
                 Vui lòng kiểm tra và đặt lại gốc tọa độ chuẩn trong Altium Designer trước khi xuất Pick & Place!"
@@ -2201,6 +2244,31 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                 _ => {}
             }
             0
+        }
+        0x0138 => { // WM_CTLCOLORSTATIC
+            let (h_status, h_active_prof, origin_type) = {
+                let state = STATE.lock().unwrap();
+                (state.h_status, state.h_lbl_active_profile, state.origin_type)
+            };
+            let hwnd_static = lparam as HWND;
+            let hdc_static = wparam as HDC;
+            if hwnd_static == h_active_prof {
+                SetTextColor(hdc_static, 0x00C78402); // #0284C7
+                SetBkMode(hdc_static, 2 /* OPAQUE */);
+                SetBkColor(hdc_static, GetSysColor(15 /* COLOR_BTNFACE */));
+                return GetSysColorBrush(15) as isize;
+            } else if hwnd_static == h_status {
+                if origin_type == OriginTypeRust::BottomLeft || origin_type == OriginTypeRust::BottomRight {
+                    SetTextColor(hdc_static, 0x00577804); // #047857
+                } else if origin_type == OriginTypeRust::Invalid {
+                    SetTextColor(hdc_static, 0x002626DC); // #DC2626
+                } else {
+                    SetTextColor(hdc_static, 0x003B291E);
+                }
+                SetBkMode(hdc_static, 1 /* TRANSPARENT */);
+                return GetSysColorBrush(15) as isize;
+            }
+            DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         0x0002 => { // WM_DESTROY
             PostQuitMessage(0);

@@ -1308,11 +1308,14 @@ class NeoDenYY1App:
                     self.btn_convert.config(text="💾 LƯU CẢ 2 FILE (TOP + BOTTOM) CHO MÁY NEODEN YY1")
 
         if self.origin_type == "BOTTOM_LEFT":
-            origin_str = "📍 Gốc: GÓC DƯỚI BÊN TRÁI (X>=0, Y>=0)"
+            origin_str = "✅ FILE HỢP LỆ | 📍 Gốc: GÓC DƯỚI BÊN TRÁI (X>=0, Y>=0)"
+            status_fg = "#16A34A"
         elif self.origin_type == "BOTTOM_RIGHT":
-            origin_str = "📍 Gốc: GÓC DƯỚI BÊN PHẢI (X<=0, Y>=0)"
+            origin_str = "✅ FILE HỢP LỆ | 📍 Gốc: GÓC DƯỚI BÊN PHẢI (X<=0, Y>=0)"
+            status_fg = "#16A34A"
         else:
-            origin_str = "⚠️ CẢNH BÁO: GỐC TỌA ĐỘ KHÔNG HỢP LỆ (ở giữa/trong/trên mạch)!"
+            origin_str = "⚠️ CẢNH BÁO: FILE KHÔNG HỢP LỆ (Gốc ở giữa/trong/trên mạch)!"
+            status_fg = "#DC2626"
 
         if has_top and has_bot:
             layer_str = f"📦 2 Mặt (TOP: {len(self.top_components)} LK, BOT: {len(self.bot_components)} LK)"
@@ -1324,13 +1327,36 @@ class NeoDenYY1App:
             layer_str = "📦 Chưa có linh kiện nào"
 
         if hasattr(self, "stats_label"):
-            self.stats_label.config(text=f"{origin_str}  |  {layer_str}")
+            self.stats_label.config(text=f"{origin_str}  |  {layer_str}", foreground=status_fg)
 
-        if self.origin_type == "INVALID":
+        if self.origin_type == "BOTTOM_LEFT":
+            msg = (
+                f"🎉 KẾT QUẢ NHẬN DIỆN FILE:\n\n"
+                f"✔ Tình trạng file: HỢP LỆ (Gốc Chuẩn NeoDen YY1)\n"
+                f"📍 Vị trí gốc tọa độ: GÓC DƯỚI BÊN TRÁI (Bottom-Left: X >= 0, Y >= 0)\n\n"
+                f"📦 Dữ liệu phát hiện:\n"
+                f"• Mặt TOP: {len(self.top_components)} linh kiện (tọa độ giữ nguyên)\n"
+                f"• Mặt BOTTOM: {len(self.bot_components)} linh kiện (tự động tính X_bot = Chiều_Rộng - X)\n\n"
+                f"Toàn bộ 13 thông số máy NeoDen YY1 đã được nạp sẵn sàng!"
+            )
+            messagebox.showinfo("Nhận Diện File Thành Công", msg)
+        elif self.origin_type == "BOTTOM_RIGHT":
+            msg = (
+                f"🎉 KẾT QUẢ NHẬN DIỆN FILE:\n\n"
+                f"✔ Tình trạng file: HỢP LỆ (Gốc Chuẩn NeoDen YY1)\n"
+                f"📍 Vị trí gốc tọa độ: GÓC DƯỚI BÊN PHẢI (Bottom-Right: X <= 0, Y >= 0)\n\n"
+                f"📦 Dữ liệu phát hiện:\n"
+                f"• Mặt BOTTOM: {len(self.bot_components)} linh kiện (tọa độ dương hóa |X|)\n"
+                f"• Mặt TOP: {len(self.top_components)} linh kiện (tự động tính X_top = Chiều_Rộng + X)\n\n"
+                f"Toàn bộ 13 thông số máy NeoDen YY1 đã được nạp sẵn sàng!"
+            )
+            messagebox.showinfo("Nhận Diện File Thành Công", msg)
+        elif self.origin_type == "INVALID":
             messagebox.showwarning(
                 "Cảnh Báo Gốc Tọa Độ Không Hợp Lệ",
                 "⚠️ CẢNH BÁO FILE KHÔNG HỢP LỆ:\n\n"
-                "Gốc tọa độ của file hiện tại đang được đặt ở GIỮA MẠCH, TRÊN MẠCH hoặc TRONG MẠCH!\n\n"
+                "❌ Tình trạng: Gốc tọa độ của file hiện tại đang được đặt ở GIỮA MẠCH, TRÊN MẠCH hoặc TRONG MẠCH!\n"
+                "   (Phát hiện tọa độ X vừa có số âm vừa có số dương, hoặc trục Y mang giá trị âm)\n\n"
                 "📌 Quy chuẩn máy NeoDen YY1:\n"
                 "- Gốc hợp lệ 1: Góc Dưới Bên Trái (toàn bộ X >= 0, Y >= 0)\n"
                 "- Gốc hợp lệ 2: Góc Dưới Bên Phải (toàn bộ X <= 0, Y >= 0)\n\n"

@@ -432,9 +432,31 @@ void refreshListView() {
         ListView_SetItemText(g_hListView, (int)i, 13, (LPWSTR)(c.skip ? L"1" : L"0"));
     }
 
-    wchar_t statusText[256];
-    swprintf(statusText, 256, L"✔ Mặt TOP: %zu pcs  |  Mặt BOTTOM: %zu pcs  |  Đang hiển thị: %s (%zu pcs)  |  Nhấp đúp chuột để sửa",
-             g_top_components.size(), g_bot_components.size(), g_showing_top ? L"TOP" : L"BOTTOM", list.size());
+    wchar_t statusText[512];
+    if (g_top_components.empty() && g_bot_components.empty()) {
+        swprintf(statusText, 512, L"Chưa chọn file CAD nào");
+    } else {
+        std::wstring originStr;
+        if (g_origin_type == ORIGIN_BOTTOM_LEFT) {
+            originStr = L"✅ FILE HỢP LỆ | 📍 Gốc: DƯỚI-TRÁI (X>=0, Y>=0)";
+        } else if (g_origin_type == ORIGIN_BOTTOM_RIGHT) {
+            originStr = L"✅ FILE HỢP LỆ | 📍 Gốc: DƯỚI-PHẢI (X<=0, Y>=0)";
+        } else {
+            originStr = L"⚠️ FILE KHÔNG HỢP LỆ (Gốc ở giữa/trong/trên mạch)";
+        }
+
+        std::wstring layerStr;
+        if (!g_top_components.empty() && !g_bot_components.empty()) {
+            layerStr = L"📦 2 Mặt (TOP: " + std::to_wstring(g_top_components.size()) + L" LK, BOT: " + std::to_wstring(g_bot_components.size()) + L" LK)";
+        } else if (!g_top_components.empty()) {
+            layerStr = L"📦 Chỉ có TOP (" + std::to_wstring(g_top_components.size()) + L" LK)";
+        } else if (!g_bot_components.empty()) {
+            layerStr = L"📦 Chỉ có BOT (" + std::to_wstring(g_bot_components.size()) + L" LK)";
+        }
+
+        swprintf(statusText, 512, L"%ls | %ls | Đang xem: %s",
+                 originStr.c_str(), layerStr.c_str(), g_showing_top ? L"Mặt TOP" : L"Mặt BOT");
+    }
     SetWindowTextW(g_hStatus, statusText);
 }
 
@@ -812,16 +834,34 @@ static void updateLayerAndOriginUI() {
     swprintf(statusMsg, 512, L"%ls | %ls", originStr.c_str(), layerStr.c_str());
     if (g_hStatus) SetWindowTextW(g_hStatus, statusMsg);
 
-    if (g_origin_type == ORIGIN_INVALID) {
-        MessageBoxW(g_hWnd, 
-            L"⚠️ CẢNH BÁO FILE KHÔNG HỢP LỆ:\n\n"
-            L"Gốc tọa độ của file hiện tại đang được đặt ở GIỮA MẠCH, TRÊN MẠCH hoặc TRONG MẠCH!\n\n"
-            L"📌 Quy chuẩn máy NeoDen YY1:\n"
-            L"- Gốc hợp lệ 1: Góc Dưới Bên Trái (toàn bộ X >= 0, Y >= 0)\n"
-            L"- Gốc hợp lệ 2: Góc Dưới Bên Phải (toàn bộ X <= 0, Y >= 0)\n\n"
-            L"Vui lòng kiểm tra và đặt lại gốc tọa độ chuẩn trong Altium Designer trước khi xuất Pick & Place!",
-            L"Cảnh Báo Gốc Tọa Độ Không Hợp Lệ",
-            MB_ICONWARNING);
+    // Thông báo nhận diện file và gốc tọa độ
+    if (g_origin_type == ORIGIN_BOTTOM_LEFT) {
+        std::wstring msg = L"🎉 KẾT QUẢ NHẬN DIỆN FILE:\n\n"
+                           L"✔ Tình trạng file: HỢP LỆ (Gốc Chuẩn NeoDen YY1)\n"
+                           L"📍 Vị trí gốc tọa độ: GÓC DƯỚI BÊN TRÁI (Bottom-Left: X >= 0, Y >= 0)\n\n"
+                           L"📦 Dữ liệu phát hiện:\n"
+                           L"• Mặt TOP: " + std::to_wstring(g_top_components.size()) + L" linh kiện (tọa độ giữ nguyên)\n"
+                           L"• Mặt BOTTOM: " + std::to_wstring(g_bot_components.size()) + L" linh kiện (tự động tính X_bot = Chiều_Rộng - X)\n\n"
+                           L"Toàn bộ 13 thông số máy NeoDen YY1 đã được nạp sẵn sàng!";
+        MessageBoxW(g_hWnd, msg.c_str(), L"Nhận Diện File Thành Công", MB_ICONINFORMATION);
+    } else if (g_origin_type == ORIGIN_BOTTOM_RIGHT) {
+        std::wstring msg = L"🎉 KẾT QUẢ NHẬN DIỆN FILE:\n\n"
+                           L"✔ Tình trạng file: HỢP LỆ (Gốc Chuẩn NeoDen YY1)\n"
+                           L"📍 Vị trí gốc tọa độ: GÓC DƯỚI BÊN PHẢI (Bottom-Right: X <= 0, Y >= 0)\n\n"
+                           L"📦 Dữ liệu phát hiện:\n"
+                           L"• Mặt BOTTOM: " + std::to_wstring(g_bot_components.size()) + L" linh kiện (tọa độ dương hóa |X|)\n"
+                           L"• Mặt TOP: " + std::to_wstring(g_top_components.size()) + L" linh kiện (tự động tính X_top = Chiều_Rộng + X)\n\n"
+                           L"Toàn bộ 13 thông số máy NeoDen YY1 đã được nạp sẵn sàng!";
+        MessageBoxW(g_hWnd, msg.c_str(), L"Nhận Diện File Thành Công", MB_ICONINFORMATION);
+    } else if (g_origin_type == ORIGIN_INVALID) {
+        std::wstring msg = L"⚠️ CẢNH BÁO FILE KHÔNG HỢP LỆ:\n\n"
+                           L"❌ Tình trạng: Gốc tọa độ đang đặt ở GIỮA MẠCH, TRONG MẠCH hoặc TRÊN MẠCH!\n"
+                           L"   (Phát hiện tọa độ X vừa có số âm vừa có số dương, hoặc trục Y mang giá trị âm)\n\n"
+                           L"📌 Quy chuẩn máy dán NeoDen YY1:\n"
+                           L"- Gốc hợp lệ 1: Góc Dưới Bên Trái (toàn bộ X >= 0, Y >= 0)\n"
+                           L"- Gốc hợp lệ 2: Góc Dưới Bên Phải (toàn bộ X <= 0, Y >= 0)\n\n"
+                           L"Vui lòng kiểm tra và đặt lại gốc tọa độ chuẩn trong Altium Designer trước khi xuất Pick & Place!";
+        MessageBoxW(g_hWnd, msg.c_str(), L"Cảnh Báo Gốc Tọa Độ Không Hợp Lệ", MB_ICONWARNING);
     }
 }
 
@@ -1701,6 +1741,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             SetTextColor(hdcStatic, RGB(2, 132, 199)); // #0284C7
             SetBkMode(hdcStatic, OPAQUE);
             SetBkColor(hdcStatic, GetSysColor(COLOR_BTNFACE));
+            return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
+        } else if (hwndStatic == g_hStatus) {
+            if (g_origin_type == ORIGIN_BOTTOM_LEFT || g_origin_type == ORIGIN_BOTTOM_RIGHT) {
+                SetTextColor(hdcStatic, RGB(4, 120, 87)); // Xanh lá cây đậm #047857
+            } else if (g_origin_type == ORIGIN_INVALID) {
+                SetTextColor(hdcStatic, RGB(220, 38, 38)); // Đỏ cảnh báo #DC2626
+            } else {
+                SetTextColor(hdcStatic, RGB(30, 41, 59));
+            }
+            SetBkMode(hdcStatic, TRANSPARENT);
             return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
         }
         break;
