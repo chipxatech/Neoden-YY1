@@ -588,14 +588,30 @@ class NeoDenYY1App:
         input_frame = ttk.LabelFrame(main_container, text="  1. File Altium Pick & Place Đầu Vào  ", style="Card.TLabelframe", padding=10)
         input_frame.pack(fill=tk.X, pady=(0, 8))
         
-        entry_box = ttk.Entry(input_frame, textvariable=self.input_file, font=("Segoe UI", 10))
+        row1_file = tk.Frame(input_frame, bg=card_bg)
+        row1_file.pack(fill=tk.X)
+        
+        entry_box = ttk.Entry(row1_file, textvariable=self.input_file, font=("Segoe UI", 10))
         entry_box.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
         
-        btn_browse = ttk.Button(input_frame, text="📁 Chọn File...", style="Action.TButton", command=self.browse_file)
+        btn_browse = ttk.Button(row1_file, text="📁 Chọn File...", style="Action.TButton", command=self.browse_file)
         btn_browse.pack(side=tk.RIGHT, padx=4)
         
-        btn_reload = ttk.Button(input_frame, text="🔄 Tải & Chuyển Đổi Lại", style="Action.TButton", command=self.load_altium_data)
+        btn_reload = ttk.Button(row1_file, text="🔄 Tải & Chuyển Đổi Lại", style="Action.TButton", command=self.load_altium_data)
         btn_reload.pack(side=tk.RIGHT)
+        
+        # Row 2: Thẻ Nhận Diện Trực Quan (Origin & File Recognition Status Card)
+        recog_frame = tk.Frame(input_frame, bg=card_bg, pady=4)
+        recog_frame.pack(fill=tk.X, pady=(6, 0))
+        
+        self.badge_origin = tk.Label(recog_frame, text="[ -- ] CHƯA CHỌN FILE", font=("Segoe UI", 9, "bold"), fg="#94A3B8", bg="#1E293B", padx=8, pady=3, relief="groove", bd=1)
+        self.badge_origin.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.lbl_origin_detail = tk.Label(recog_frame, text="Vui lòng chọn file Pick & Place (.csv / .txt) từ Altium Designer.", font=("Segoe UI", 9), fg="#F8FAFC", bg=card_bg)
+        self.lbl_origin_detail.pack(side=tk.LEFT)
+        
+        self.lbl_layer_summary = tk.Label(recog_frame, text="", font=("Segoe UI", 9, "bold"), fg="#60A5FA", bg=card_bg)
+        self.lbl_layer_summary.pack(side=tk.RIGHT)
         
         # --- KHỐI 2: TABS TOP/BOTTOM & BẢNG 13 CỘT CHỈNH SỬA TRỰC TIẾP ---
         table_frame = ttk.LabelFrame(main_container, text="  2. Bảng Thông Số 13 Cột Chuẩn NeoDen YY1 (Nhấp đúp vào dòng để sửa)  ", style="Card.TLabelframe", padding=8)
@@ -1307,51 +1323,35 @@ class NeoDenYY1App:
                 if hasattr(self, "btn_convert"):
                     self.btn_convert.config(text="💾 LƯU CẢ 2 FILE (TOP + BOTTOM) CHO MÁY NEODEN YY1")
 
-        if self.origin_type == "BOTTOM_LEFT":
-            origin_str = "✅ FILE HỢP LỆ | 📍 Gốc: GÓC DƯỚI BÊN TRÁI (X>=0, Y>=0)"
-            status_fg = "#16A34A"
-        elif self.origin_type == "BOTTOM_RIGHT":
-            origin_str = "✅ FILE HỢP LỆ | 📍 Gốc: GÓC DƯỚI BÊN PHẢI (X<=0, Y>=0)"
-            status_fg = "#16A34A"
-        else:
-            origin_str = "⚠️ CẢNH BÁO: FILE KHÔNG HỢP LỆ (Gốc ở giữa/trong/trên mạch)!"
-            status_fg = "#DC2626"
-
-        if has_top and has_bot:
-            layer_str = f"📦 2 Mặt (TOP: {len(self.top_components)} LK, BOT: {len(self.bot_components)} LK)"
-        elif has_top:
-            layer_str = f"📦 Chỉ có Mặt TOP ({len(self.top_components)} LK)"
-        elif has_bot:
-            layer_str = f"📦 Chỉ có Mặt BOTTOM ({len(self.bot_components)} LK)"
-        else:
-            layer_str = "📦 Chưa có linh kiện nào"
+        total_comps = len(self.top_components) + len(self.bot_components)
+        if hasattr(self, "badge_origin") and hasattr(self, "lbl_origin_detail") and hasattr(self, "lbl_layer_summary"):
+            if total_comps == 0:
+                self.badge_origin.config(text="[ -- ] CHƯA CHỌN FILE", fg="#94A3B8", bg="#1E293B")
+                self.lbl_origin_detail.config(text="Vui lòng chọn file Pick & Place (.csv / .txt) từ Altium Designer.")
+                self.lbl_layer_summary.config(text="")
+            elif self.origin_type == "BOTTOM_LEFT":
+                self.badge_origin.config(text="[ OK ] GỐC DƯỚI - BÊN TRÁI", fg="#10B981", bg="#064E3B")
+                self.lbl_origin_detail.config(text="Tọa độ gốc: Góc Dưới Bên Trái (X >= 0, Y >= 0) • TOP giữ nguyên, BOT = Chiều_Rộng - X")
+                self.lbl_layer_summary.config(text=f"Mặt TOP: {len(self.top_components)} LK  |  Mặt BOT: {len(self.bot_components)} LK  |  Tổng: {total_comps} LK")
+            elif self.origin_type == "BOTTOM_RIGHT":
+                self.badge_origin.config(text="[ OK ] GỐC DƯỚI - BÊN PHẢI", fg="#10B981", bg="#064E3B")
+                self.lbl_origin_detail.config(text="Tọa độ gốc: Góc Dưới Bên Phải (X <= 0, Y >= 0) • BOT dương hóa |X|, TOP = Chiều_Rộng - |X|")
+                self.lbl_layer_summary.config(text=f"Mặt TOP: {len(self.top_components)} LK  |  Mặt BOT: {len(self.bot_components)} LK  |  Tổng: {total_comps} LK")
+            else:
+                self.badge_origin.config(text="[ ! ] GỐC KHÔNG HỢP LỆ", fg="#EF4444", bg="#7F1D1D")
+                self.lbl_origin_detail.config(text="Gốc đang đặt ở giữa/trên mạch (X vừa âm vừa dương hoặc Y < 0). Cần đặt lại trong Altium!")
+                self.lbl_layer_summary.config(text=f"Mặt TOP: {len(self.top_components)} LK  |  Mặt BOT: {len(self.bot_components)} LK  |  Tổng: {total_comps} LK")
 
         if hasattr(self, "stats_label"):
-            self.stats_label.config(text=f"{origin_str}  |  {layer_str}", foreground=status_fg)
+            if total_comps == 0:
+                self.stats_label.config(text="📊 Chưa nạp file nào. Vui lòng bấm 'Chọn File...' để nạp dữ liệu.", foreground="#38BDF8")
+            else:
+                active_idx = self.notebook.index(self.notebook.select()) if hasattr(self, "notebook") else 0
+                active_name = "Mặt TOP" if active_idx == 0 else "Mặt BOTTOM"
+                active_cnt = len(self.top_components) if active_idx == 0 else len(self.bot_components)
+                self.stats_label.config(text=f"Đang hiển thị: {active_name} ({active_cnt}/{total_comps} LK)  |  Nhấp đúp chuột để sửa trực tiếp", foreground="#F8FAFC")
 
-        if self.origin_type == "BOTTOM_LEFT":
-            msg = (
-                f"🎉 KẾT QUẢ NHẬN DIỆN FILE:\n\n"
-                f"✔ Tình trạng file: HỢP LỆ (Gốc Chuẩn NeoDen YY1)\n"
-                f"📍 Vị trí gốc tọa độ: GÓC DƯỚI BÊN TRÁI (Bottom-Left: X >= 0, Y >= 0)\n\n"
-                f"📦 Dữ liệu phát hiện:\n"
-                f"• Mặt TOP: {len(self.top_components)} linh kiện (tọa độ giữ nguyên)\n"
-                f"• Mặt BOTTOM: {len(self.bot_components)} linh kiện (tự động tính X_bot = Chiều_Rộng - X)\n\n"
-                f"Toàn bộ 13 thông số máy NeoDen YY1 đã được nạp sẵn sàng!"
-            )
-            messagebox.showinfo("Nhận Diện File Thành Công", msg)
-        elif self.origin_type == "BOTTOM_RIGHT":
-            msg = (
-                f"🎉 KẾT QUẢ NHẬN DIỆN FILE:\n\n"
-                f"✔ Tình trạng file: HỢP LỆ (Gốc Chuẩn NeoDen YY1)\n"
-                f"📍 Vị trí gốc tọa độ: GÓC DƯỚI BÊN PHẢI (Bottom-Right: X <= 0, Y >= 0)\n\n"
-                f"📦 Dữ liệu phát hiện:\n"
-                f"• Mặt BOTTOM: {len(self.bot_components)} linh kiện (tọa độ dương hóa |X|)\n"
-                f"• Mặt TOP: {len(self.top_components)} linh kiện (tự động tính X_top = Chiều_Rộng + X)\n\n"
-                f"Toàn bộ 13 thông số máy NeoDen YY1 đã được nạp sẵn sàng!"
-            )
-            messagebox.showinfo("Nhận Diện File Thành Công", msg)
-        elif self.origin_type == "INVALID":
+        if self.origin_type == "INVALID":
             messagebox.showwarning(
                 "Cảnh Báo Gốc Tọa Độ Không Hợp Lệ",
                 "⚠️ CẢNH BÁO FILE KHÔNG HỢP LỆ:\n\n"
@@ -1478,6 +1478,16 @@ class NeoDenYY1App:
         
         self.notebook.tab(0, text=f"  Mặt TOP ({len(self.top_components)} linh kiện)  ")
         self.notebook.tab(1, text=f"  Mặt BOTTOM ({len(self.bot_components)} linh kiện)  ")
+
+        total_comps = len(self.top_components) + len(self.bot_components)
+        if hasattr(self, "stats_label"):
+            if total_comps == 0:
+                self.stats_label.config(text="📊 Chưa nạp file nào. Vui lòng bấm 'Chọn File...' để nạp dữ liệu.", foreground="#38BDF8")
+            else:
+                active_idx = self.notebook.index(self.notebook.select()) if hasattr(self, "notebook") else 0
+                active_name = "Mặt TOP" if active_idx == 0 else "Mặt BOTTOM"
+                active_cnt = len(self.top_components) if active_idx == 0 else len(self.bot_components)
+                self.stats_label.config(text=f"Đang hiển thị: {active_name} ({active_cnt}/{total_comps} LK)  |  Nhấp đúp chuột để sửa trực tiếp", foreground="#F8FAFC")
 
     def get_active_tree_and_list(self):
         if self.notebook.index(self.notebook.select()) == 0:

@@ -74,6 +74,9 @@ HWND g_hStatus = NULL;
 HWND g_hRadioTop = NULL;
 HWND g_hRadioBot = NULL;
 HWND g_hChkAutoMatch = NULL;
+HWND g_hBadgeOrigin = NULL;
+HWND g_hLblOriginDetail = NULL;
+HWND g_hLblLayerSummary = NULL;
 bool g_auto_match_feeder = true;
 double g_board_width = 0.0;
 OriginType g_origin_type = ORIGIN_BOTTOM_LEFT;
@@ -433,29 +436,12 @@ void refreshListView() {
     }
 
     wchar_t statusText[512];
-    if (g_top_components.empty() && g_bot_components.empty()) {
+    size_t total_comps = g_top_components.size() + g_bot_components.size();
+    if (total_comps == 0) {
         swprintf(statusText, 512, L"Chưa chọn file CAD nào");
     } else {
-        std::wstring originStr;
-        if (g_origin_type == ORIGIN_BOTTOM_LEFT) {
-            originStr = L"✅ FILE HỢP LỆ | 📍 Gốc: DƯỚI-TRÁI (X>=0, Y>=0)";
-        } else if (g_origin_type == ORIGIN_BOTTOM_RIGHT) {
-            originStr = L"✅ FILE HỢP LỆ | 📍 Gốc: DƯỚI-PHẢI (X<=0, Y>=0)";
-        } else {
-            originStr = L"⚠️ FILE KHÔNG HỢP LỆ (Gốc ở giữa/trong/trên mạch)";
-        }
-
-        std::wstring layerStr;
-        if (!g_top_components.empty() && !g_bot_components.empty()) {
-            layerStr = L"📦 2 Mặt (TOP: " + std::to_wstring(g_top_components.size()) + L" LK, BOT: " + std::to_wstring(g_bot_components.size()) + L" LK)";
-        } else if (!g_top_components.empty()) {
-            layerStr = L"📦 Chỉ có TOP (" + std::to_wstring(g_top_components.size()) + L" LK)";
-        } else if (!g_bot_components.empty()) {
-            layerStr = L"📦 Chỉ có BOT (" + std::to_wstring(g_bot_components.size()) + L" LK)";
-        }
-
-        swprintf(statusText, 512, L"%ls | %ls | Đang xem: %s",
-                 originStr.c_str(), layerStr.c_str(), g_showing_top ? L"Mặt TOP" : L"Mặt BOT");
+        swprintf(statusText, 512, L"Đang hiển thị: %s (%zu/%zu LK)  |  Nhấp đúp chuột để sửa trực tiếp",
+                 g_showing_top ? L"Mặt TOP" : L"Mặt BOTTOM", list.size(), total_comps);
     }
     SetWindowTextW(g_hStatus, statusText);
 }
@@ -770,14 +756,17 @@ static void updateLayerAndOriginUI() {
     bool has_top = !g_top_components.empty();
     bool has_bot = !g_bot_components.empty();
 
+    std::wstring topRadioText = L"Mặt TOP (" + std::to_wstring(g_top_components.size()) + L" LK)";
+    std::wstring botRadioText = L"Mặt BOTTOM (" + std::to_wstring(g_bot_components.size()) + L" LK)";
+    SetWindowTextW(g_hRadioTop, topRadioText.c_str());
+    SetWindowTextW(g_hRadioBot, botRadioText.c_str());
+
     if (has_top && !has_bot) {
         g_showing_top = true;
         SendMessageW(g_hRadioTop, BM_SETCHECK, BST_CHECKED, 0);
         SendMessageW(g_hRadioBot, BM_SETCHECK, BST_UNCHECKED, 0);
         EnableWindow(g_hRadioTop, TRUE);
         EnableWindow(g_hRadioBot, FALSE);
-        SetWindowTextW(g_hRadioTop, L"Mặt TOP");
-        SetWindowTextW(g_hRadioBot, L"Mặt BOTTOM (0 LK)");
 
         if (g_hLblTop) ShowWindow(g_hLblTop, SW_SHOW);
         if (g_hEditTop) ShowWindow(g_hEditTop, SW_SHOW);
@@ -790,8 +779,6 @@ static void updateLayerAndOriginUI() {
         SendMessageW(g_hRadioBot, BM_SETCHECK, BST_CHECKED, 0);
         EnableWindow(g_hRadioTop, FALSE);
         EnableWindow(g_hRadioBot, TRUE);
-        SetWindowTextW(g_hRadioTop, L"Mặt TOP (0 LK)");
-        SetWindowTextW(g_hRadioBot, L"Mặt BOTTOM");
 
         if (g_hLblTop) ShowWindow(g_hLblTop, SW_HIDE);
         if (g_hEditTop) ShowWindow(g_hEditTop, SW_HIDE);
@@ -801,8 +788,6 @@ static void updateLayerAndOriginUI() {
     } else if (has_top && has_bot) {
         EnableWindow(g_hRadioTop, TRUE);
         EnableWindow(g_hRadioBot, TRUE);
-        SetWindowTextW(g_hRadioTop, L"Mặt TOP");
-        SetWindowTextW(g_hRadioBot, L"Mặt BOTTOM");
 
         if (g_hLblTop) ShowWindow(g_hLblTop, SW_SHOW);
         if (g_hEditTop) ShowWindow(g_hEditTop, SW_SHOW);
@@ -811,49 +796,45 @@ static void updateLayerAndOriginUI() {
         if (g_hBtnConvert) SetWindowTextW(g_hBtnConvert, L"💾 LƯU CẢ 2 FILE (TOP + BOTTOM) CHO MÁY NEODEN YY1");
     }
 
-    // Nhãn trạng thái
-    std::wstring originStr;
-    if (g_origin_type == ORIGIN_BOTTOM_LEFT) {
-        originStr = L"📍 Gốc: GÓC DƯỚI BÊN TRÁI (X>=0, Y>=0)";
-    } else if (g_origin_type == ORIGIN_BOTTOM_RIGHT) {
-        originStr = L"📍 Gốc: GÓC DƯỚI BÊN PHẢI (X<=0, Y>=0)";
-    } else {
-        originStr = L"⚠️ CẢNH BÁO: GỐC TỌA ĐỘ KHÔNG HỢP LỆ (ở giữa/trong/trên mạch)!";
+    // Cập nhật Thẻ Nhận Diện Gốc Tọa Độ (Banner Status Card)
+    if (g_hBadgeOrigin && g_hLblOriginDetail && g_hLblLayerSummary) {
+        size_t total_comps = g_top_components.size() + g_bot_components.size();
+        if (total_comps == 0) {
+            SetWindowTextW(g_hBadgeOrigin, L"[ -- ] CHƯA CHỌN FILE");
+            SetWindowTextW(g_hLblOriginDetail, L"Vui lòng chọn file Pick & Place (.csv / .txt) từ Altium Designer.");
+            SetWindowTextW(g_hLblLayerSummary, L"");
+        } else if (g_origin_type == ORIGIN_BOTTOM_LEFT) {
+            SetWindowTextW(g_hBadgeOrigin, L"[ OK ] GỐC DƯỚI - BÊN TRÁI");
+            SetWindowTextW(g_hLblOriginDetail, L"Tọa độ gốc: Góc Dưới Bên Trái (X >= 0, Y >= 0) • TOP giữ nguyên, BOT = Chiều_Rộng - X");
+            
+            wchar_t sumBuf[256];
+            swprintf(sumBuf, 256, L"Mặt TOP: %zu LK  |  Mặt BOT: %zu LK  |  Tổng: %zu LK",
+                     g_top_components.size(), g_bot_components.size(), total_comps);
+            SetWindowTextW(g_hLblLayerSummary, sumBuf);
+        } else if (g_origin_type == ORIGIN_BOTTOM_RIGHT) {
+            SetWindowTextW(g_hBadgeOrigin, L"[ OK ] GỐC DƯỚI - BÊN PHẢI");
+            SetWindowTextW(g_hLblOriginDetail, L"Tọa độ gốc: Góc Dưới Bên Phải (X <= 0, Y >= 0) • BOT dương hóa |X|, TOP = Chiều_Rộng - |X|");
+            
+            wchar_t sumBuf[256];
+            swprintf(sumBuf, 256, L"Mặt TOP: %zu LK  |  Mặt BOT: %zu LK  |  Tổng: %zu LK",
+                     g_top_components.size(), g_bot_components.size(), total_comps);
+            SetWindowTextW(g_hLblLayerSummary, sumBuf);
+        } else {
+            SetWindowTextW(g_hBadgeOrigin, L"[ ! ] GỐC KHÔNG HỢP LỆ");
+            SetWindowTextW(g_hLblOriginDetail, L"Gốc đang đặt ở giữa/trên mạch (X vừa âm vừa dương hoặc Y < 0). Cần đặt lại trong Altium!");
+            
+            wchar_t sumBuf[256];
+            swprintf(sumBuf, 256, L"Mặt TOP: %zu LK  |  Mặt BOT: %zu LK  |  Tổng: %zu LK",
+                     g_top_components.size(), g_bot_components.size(), total_comps);
+            SetWindowTextW(g_hLblLayerSummary, sumBuf);
+        }
+
+        InvalidateRect(g_hBadgeOrigin, NULL, TRUE);
+        InvalidateRect(g_hLblOriginDetail, NULL, TRUE);
+        InvalidateRect(g_hLblLayerSummary, NULL, TRUE);
     }
 
-    std::wstring layerStr;
-    if (has_top && has_bot) {
-        layerStr = L"📦 2 Mặt (TOP: " + std::to_wstring(g_top_components.size()) + L" LK, BOT: " + std::to_wstring(g_bot_components.size()) + L" LK)";
-    } else if (has_top) {
-        layerStr = L"📦 Chỉ có Mặt TOP (" + std::to_wstring(g_top_components.size()) + L" LK)";
-    } else if (has_bot) {
-        layerStr = L"📦 Chỉ có Mặt BOTTOM (" + std::to_wstring(g_bot_components.size()) + L" LK)";
-    }
-
-    wchar_t statusMsg[512];
-    swprintf(statusMsg, 512, L"%ls | %ls", originStr.c_str(), layerStr.c_str());
-    if (g_hStatus) SetWindowTextW(g_hStatus, statusMsg);
-
-    // Thông báo nhận diện file và gốc tọa độ
-    if (g_origin_type == ORIGIN_BOTTOM_LEFT) {
-        std::wstring msg = L"🎉 KẾT QUẢ NHẬN DIỆN FILE:\n\n"
-                           L"✔ Tình trạng file: HỢP LỆ (Gốc Chuẩn NeoDen YY1)\n"
-                           L"📍 Vị trí gốc tọa độ: GÓC DƯỚI BÊN TRÁI (Bottom-Left: X >= 0, Y >= 0)\n\n"
-                           L"📦 Dữ liệu phát hiện:\n"
-                           L"• Mặt TOP: " + std::to_wstring(g_top_components.size()) + L" linh kiện (tọa độ giữ nguyên)\n"
-                           L"• Mặt BOTTOM: " + std::to_wstring(g_bot_components.size()) + L" linh kiện (tự động tính X_bot = Chiều_Rộng - X)\n\n"
-                           L"Toàn bộ 13 thông số máy NeoDen YY1 đã được nạp sẵn sàng!";
-        MessageBoxW(g_hWnd, msg.c_str(), L"Nhận Diện File Thành Công", MB_ICONINFORMATION);
-    } else if (g_origin_type == ORIGIN_BOTTOM_RIGHT) {
-        std::wstring msg = L"🎉 KẾT QUẢ NHẬN DIỆN FILE:\n\n"
-                           L"✔ Tình trạng file: HỢP LỆ (Gốc Chuẩn NeoDen YY1)\n"
-                           L"📍 Vị trí gốc tọa độ: GÓC DƯỚI BÊN PHẢI (Bottom-Right: X <= 0, Y >= 0)\n\n"
-                           L"📦 Dữ liệu phát hiện:\n"
-                           L"• Mặt BOTTOM: " + std::to_wstring(g_bot_components.size()) + L" linh kiện (tọa độ dương hóa |X|)\n"
-                           L"• Mặt TOP: " + std::to_wstring(g_top_components.size()) + L" linh kiện (tự động tính X_top = Chiều_Rộng + X)\n\n"
-                           L"Toàn bộ 13 thông số máy NeoDen YY1 đã được nạp sẵn sàng!";
-        MessageBoxW(g_hWnd, msg.c_str(), L"Nhận Diện File Thành Công", MB_ICONINFORMATION);
-    } else if (g_origin_type == ORIGIN_INVALID) {
+    if (g_origin_type == ORIGIN_INVALID) {
         std::wstring msg = L"⚠️ CẢNH BÁO FILE KHÔNG HỢP LỆ:\n\n"
                            L"❌ Tình trạng: Gốc tọa độ đang đặt ở GIỮA MẠCH, TRONG MẠCH hoặc TRÊN MẠCH!\n"
                            L"   (Phát hiện tọa độ X vừa có số âm vừa có số dương, hoặc trục Y mang giá trị âm)\n\n"
@@ -1635,46 +1616,56 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         g_hLblActiveProfile = CreateWindowExW(0, L"STATIC", initProfText.c_str(), WS_CHILD | WS_VISIBLE | SS_CENTER, 1050, 42, 290, 22, hWnd, (HMENU)404, g_hInst, NULL);
         SendMessageW(g_hLblActiveProfile, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" 1. File Altium Pick & Place Dau Vao ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 75, 1320, 70, hWnd, NULL, g_hInst, NULL);
+        HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" 1. File Altium Pick & Place Dau Vao ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 72, 1320, 106, hWnd, NULL, g_hInst, NULL);
         SendMessageW(hGrp1, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        g_hEditInput = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 35, 102, 1050, 26, hWnd, (HMENU)101, g_hInst, NULL);
+        g_hEditInput = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 35, 96, 1050, 26, hWnd, (HMENU)101, g_hInst, NULL);
         SendMessageW(g_hEditInput, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
-        HWND hBtnBrowse = CreateWindowExW(0, L"BUTTON", L"Chon File...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1100, 101, 110, 28, hWnd, (HMENU)102, g_hInst, NULL);
+        HWND hBtnBrowse = CreateWindowExW(0, L"BUTTON", L"Chon File...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1100, 95, 110, 28, hWnd, (HMENU)102, g_hInst, NULL);
         SendMessageW(hBtnBrowse, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
-        HWND hBtnReload = CreateWindowExW(0, L"BUTTON", L"Tai Lai", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1220, 101, 90, 28, hWnd, (HMENU)103, g_hInst, NULL);
+        HWND hBtnReload = CreateWindowExW(0, L"BUTTON", L"Tai Lai", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1220, 95, 90, 28, hWnd, (HMENU)103, g_hInst, NULL);
         SendMessageW(hBtnReload, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
+        // Row 2: Thẻ Nhận Diện Trực Quan (Origin & File Recognition Status Card)
+        g_hBadgeOrigin = CreateWindowExW(0, L"STATIC", L"[ -- ] CHUA CHON FILE", WS_CHILD | WS_VISIBLE | SS_CENTER, 35, 136, 250, 24, hWnd, (HMENU)405, g_hInst, NULL);
+        SendMessageW(g_hBadgeOrigin, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+        g_hLblOriginDetail = CreateWindowExW(0, L"STATIC", L"Vui long chon file Pick & Place (.csv / .txt) tu Altium Designer.", WS_CHILD | WS_VISIBLE, 295, 139, 560, 20, hWnd, (HMENU)406, g_hInst, NULL);
+        SendMessageW(g_hLblOriginDetail, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
+
+        g_hLblLayerSummary = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_RIGHT, 865, 139, 445, 20, hWnd, (HMENU)407, g_hInst, NULL);
+        SendMessageW(g_hLblLayerSummary, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
         // Khoi 2: 13 Cot va Chuyen doi TOP/BOTTOM
-        HWND hGrp2 = CreateWindowExW(0, L"BUTTON", L" 2. Toan Bo 13 Cot Chuan NeoDen YY1 (Nhap dup chuot vao dong de sua) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 155, 1320, 460, hWnd, NULL, g_hInst, NULL);
+        HWND hGrp2 = CreateWindowExW(0, L"BUTTON", L" 2. Toan Bo 13 Cot Chuan NeoDen YY1 (Nhap dup chuot vao dong de sua) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 186, 1320, 440, hWnd, NULL, g_hInst, NULL);
         SendMessageW(hGrp2, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         // Radio Chuyen doi Mat TOP / BOTTOM
-        g_hRadioTop = CreateWindowExW(0, L"BUTTON", L"Mat TOP", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP, 35, 180, 85, 24, hWnd, (HMENU)401, g_hInst, NULL);
+        g_hRadioTop = CreateWindowExW(0, L"BUTTON", L"Mat TOP", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP, 35, 210, 130, 24, hWnd, (HMENU)401, g_hInst, NULL);
         SendMessageW(g_hRadioTop, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
         SendMessageW(g_hRadioTop, BM_SETCHECK, BST_CHECKED, 0);
 
-        g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 125, 180, 105, 24, hWnd, (HMENU)402, g_hInst, NULL);
+        g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 175, 210, 150, 24, hWnd, (HMENU)402, g_hInst, NULL);
         SendMessageW(g_hRadioBot, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         // Checkbox Tự động nhận diện Feeder theo cấu hình
-        g_hChkAutoMatch = CreateWindowExW(0, L"BUTTON", L"Tự động nhận diện Feeder theo Cấu hình", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 235, 180, 275, 24, hWnd, (HMENU)302, g_hInst, NULL);
+        g_hChkAutoMatch = CreateWindowExW(0, L"BUTTON", L"Tu dong nhan dien Feeder theo Cau hinh", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 335, 210, 275, 24, hWnd, (HMENU)302, g_hInst, NULL);
         SendMessageW(g_hChkAutoMatch, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
         SendMessageW(g_hChkAutoMatch, BM_SETCHECK, g_auto_match_feeder ? BST_CHECKED : BST_UNCHECKED, 0);
 
         // Ô Nhập Chiều Rộng Bo Mạch X (mm)
-        HWND hLblBw = CreateWindowExW(0, L"STATIC", L"Chiều rộng bo X (mm):", WS_CHILD | WS_VISIBLE, 520, 183, 155, 20, hWnd, NULL, g_hInst, NULL);
+        HWND hLblBw = CreateWindowExW(0, L"STATIC", L"Chieu rong bo X (mm):", WS_CHILD | WS_VISIBLE, 620, 213, 145, 20, hWnd, NULL, g_hInst, NULL);
         SendMessageW(hLblBw, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        g_hEditBoardWidth = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 680, 180, 75, 24, hWnd, (HMENU)303, g_hInst, NULL);
+        g_hEditBoardWidth = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 770, 210, 75, 24, hWnd, (HMENU)303, g_hInst, NULL);
         SendMessageW(g_hEditBoardWidth, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 765, 183, 560, 20, hWnd, (HMENU)104, g_hInst, NULL);
-        SendMessageW(g_hStatus, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+        g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 855, 213, 455, 20, hWnd, (HMENU)104, g_hInst, NULL);
+        SendMessageW(g_hStatus, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
-        g_hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 35, 210, 1290, 390, hWnd, (HMENU)105, g_hInst, NULL);
+        g_hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 35, 240, 1290, 375, hWnd, (HMENU)105, g_hInst, NULL);
         SendMessageW(g_hListView, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
         ListView_SetExtendedListViewStyle(g_hListView, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
 
@@ -1698,20 +1689,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         col.fmt = LVCFMT_CENTER; col.cx = 48;  col.pszText = (LPWSTR)L"Skip";       ListView_InsertColumn(g_hListView, 13, &col);
 
         // Khoi 3: Xuat File
-        HWND hGrp3 = CreateWindowExW(0, L"BUTTON", L" 3. Luu / Xuat File Sau Khi Chinh Sua ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 625, 1320, 135, hWnd, NULL, g_hInst, NULL);
+        HWND hGrp3 = CreateWindowExW(0, L"BUTTON", L" 3. Luu / Xuat File Sau Khi Chinh Sua ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 634, 1320, 136, hWnd, NULL, g_hInst, NULL);
         SendMessageW(hGrp3, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        g_hLblTop = CreateWindowExW(0, L"STATIC", L"Ten file TOP:", WS_CHILD | WS_VISIBLE, 35, 652, 90, 20, hWnd, NULL, g_hInst, NULL);
+        g_hLblTop = CreateWindowExW(0, L"STATIC", L"Ten file TOP:", WS_CHILD | WS_VISIBLE, 35, 660, 110, 20, hWnd, NULL, g_hInst, NULL);
         SendMessageW(g_hLblTop, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
-        g_hEditTop = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"Top_Output.csv", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 130, 648, 250, 26, hWnd, NULL, g_hInst, NULL);
+        g_hEditTop = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"Top_Output.csv", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 150, 656, 250, 26, hWnd, NULL, g_hInst, NULL);
         SendMessageW(g_hEditTop, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
-        g_hLblBot = CreateWindowExW(0, L"STATIC", L"Ten file BOTTOM:", WS_CHILD | WS_VISIBLE, 420, 652, 120, 20, hWnd, NULL, g_hInst, NULL);
+        g_hLblBot = CreateWindowExW(0, L"STATIC", L"Ten file BOTTOM:", WS_CHILD | WS_VISIBLE, 430, 660, 140, 20, hWnd, NULL, g_hInst, NULL);
         SendMessageW(g_hLblBot, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
-        g_hEditBot = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"Bot_Output.csv", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 550, 648, 250, 26, hWnd, NULL, g_hInst, NULL);
+        g_hEditBot = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"Bot_Output.csv", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 575, 656, 250, 26, hWnd, NULL, g_hInst, NULL);
         SendMessageW(g_hEditBot, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
-        g_hBtnConvert = CreateWindowExW(0, L"BUTTON", L"LUU FILE DA CHINH SUA CHO MAY NEODEN YY1", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 35, 690, 1290, 48, hWnd, (HMENU)201, g_hInst, NULL);
+        g_hBtnConvert = CreateWindowExW(0, L"BUTTON", L"LUU FILE DA CHINH SUA CHO MAY NEODEN YY1", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 35, 696, 1290, 48, hWnd, (HMENU)201, g_hInst, NULL);
         SendMessageW(g_hBtnConvert, WM_SETFONT, (WPARAM)g_hFontTitle, TRUE);
 
         // Khởi động giao diện sạch sẽ, người dùng tự chọn file cần mở
@@ -1742,14 +1733,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             SetBkMode(hdcStatic, OPAQUE);
             SetBkColor(hdcStatic, GetSysColor(COLOR_BTNFACE));
             return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
-        } else if (hwndStatic == g_hStatus) {
+        } else if (hwndStatic == g_hBadgeOrigin) {
             if (g_origin_type == ORIGIN_BOTTOM_LEFT || g_origin_type == ORIGIN_BOTTOM_RIGHT) {
-                SetTextColor(hdcStatic, RGB(4, 120, 87)); // Xanh lá cây đậm #047857
+                SetTextColor(hdcStatic, RGB(4, 120, 87)); // Dark green
             } else if (g_origin_type == ORIGIN_INVALID) {
-                SetTextColor(hdcStatic, RGB(220, 38, 38)); // Đỏ cảnh báo #DC2626
+                SetTextColor(hdcStatic, RGB(185, 28, 28)); // Dark red
             } else {
-                SetTextColor(hdcStatic, RGB(30, 41, 59));
+                SetTextColor(hdcStatic, RGB(100, 116, 139)); // Grey
             }
+            SetBkMode(hdcStatic, TRANSPARENT);
+            return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
+        } else if (hwndStatic == g_hLblOriginDetail) {
+            SetTextColor(hdcStatic, RGB(15, 23, 42)); // Slate 900
+            SetBkMode(hdcStatic, TRANSPARENT);
+            return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
+        } else if (hwndStatic == g_hLblLayerSummary) {
+            SetTextColor(hdcStatic, RGB(29, 78, 216)); // Blue 700
+            SetBkMode(hdcStatic, TRANSPARENT);
+            return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
+        } else if (hwndStatic == g_hStatus) {
+            SetTextColor(hdcStatic, RGB(51, 65, 85)); // Slate 700
             SetBkMode(hdcStatic, TRANSPARENT);
             return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
         }

@@ -236,6 +236,9 @@ struct AppState {
     h_radio_bot: HWND,
     h_chk_auto_match: HWND,
     h_lbl_active_profile: HWND,
+    h_badge_origin: HWND,
+    h_lbl_origin_detail: HWND,
+    h_lbl_layer_summary: HWND,
     auto_match_feeder: bool,
     font_main_title: HFONT,
     font_main_bold: HFONT,
@@ -270,6 +273,9 @@ static STATE: Mutex<AppState> = Mutex::new(AppState {
     h_radio_bot: ptr::null_mut(),
     h_chk_auto_match: ptr::null_mut(),
     h_lbl_active_profile: ptr::null_mut(),
+    h_badge_origin: ptr::null_mut(),
+    h_lbl_origin_detail: ptr::null_mut(),
+    h_lbl_layer_summary: ptr::null_mut(),
     auto_match_feeder: true,
     font_main_title: ptr::null_mut(),
     font_main_bold: ptr::null_mut(),
@@ -450,28 +456,13 @@ fn refresh_list_view() {
             set_sub(13, &format!("{}", c.skip));
         }
 
-        let origin_type = {
-            let state = STATE.lock().unwrap();
-            state.origin_type
-        };
-        let status_txt = if top_len == 0 && bot_len == 0 {
+        let total_comps = top_len + bot_len;
+        let status_txt = if total_comps == 0 {
             "Chưa chọn file CAD nào".to_string()
         } else {
-            let origin_str = match origin_type {
-                OriginTypeRust::BottomLeft => "✅ FILE HỢP LỆ | 📍 Gốc: DƯỚI-TRÁI (X>=0, Y>=0)",
-                OriginTypeRust::BottomRight => "✅ FILE HỢP LỆ | 📍 Gốc: DƯỚI-PHẢI (X<=0, Y>=0)",
-                _ => "⚠️ FILE KHÔNG HỢP LỆ (Gốc ở giữa/trong/trên mạch)",
-            };
-            let layer_str = if top_len > 0 && bot_len > 0 {
-                format!("📦 2 Mặt (TOP: {} LK, BOT: {} LK)", top_len, bot_len)
-            } else if top_len > 0 {
-                format!("📦 Chỉ có TOP ({} LK)", top_len)
-            } else if bot_len > 0 {
-                format!("📦 Chỉ có BOT ({} LK)", bot_len)
-            } else {
-                "📦 0 LK".to_string()
-            };
-            format!("{} | {} | Đang xem: {}", origin_str, layer_str, if showing_top { "Mặt TOP" } else { "Mặt BOT" })
+            let cur_count = if showing_top { top_len } else { bot_len };
+            format!("Đang hiển thị: {} ({}/{} LK)  |  Nhấp đúp chuột để sửa trực tiếp",
+                    if showing_top { "Mặt TOP" } else { "Mặt BOTTOM" }, cur_count, total_comps)
         };
         let w_status = to_wstr(&status_txt);
         SetWindowTextW(hwnd_status, w_status.as_ptr());
@@ -859,7 +850,7 @@ fn recalc_coordinates_rust() {
 }
 
 fn update_layer_and_origin_ui_rust() {
-    let (hwnd, h_top_radio, h_bot_radio, h_lbl_top, h_edit_top, h_lbl_bot, h_edit_bot, h_btn_convert, h_status, origin_type, top_len, bot_len) = {
+    let (hwnd, h_top_radio, h_bot_radio, h_lbl_top, h_edit_top, h_lbl_bot, h_edit_bot, h_btn_convert, h_badge, h_detail, h_summary, origin_type, top_len, bot_len) = {
         let state = STATE.lock().unwrap();
         (
             state.hwnd,
@@ -870,7 +861,9 @@ fn update_layer_and_origin_ui_rust() {
             state.h_lbl_bot,
             state.h_edit_bot,
             state.h_btn_convert,
-            state.h_status,
+            state.h_badge_origin,
+            state.h_lbl_origin_detail,
+            state.h_lbl_layer_summary,
             state.origin_type,
             state.top_components.len(),
             state.bot_components.len(),
@@ -881,6 +874,11 @@ fn update_layer_and_origin_ui_rust() {
     let has_bot = bot_len > 0;
 
     unsafe {
+        let top_txt = format!("Mặt TOP ({} LK)", top_len);
+        let bot_txt = format!("Mặt BOTTOM ({} LK)", bot_len);
+        SetWindowTextW(h_top_radio, to_wstr(&top_txt).as_ptr());
+        SetWindowTextW(h_bot_radio, to_wstr(&bot_txt).as_ptr());
+
         if has_top && !has_bot {
             {
                 let mut state = STATE.lock().unwrap();
@@ -890,8 +888,6 @@ fn update_layer_and_origin_ui_rust() {
             SendMessageW(h_bot_radio, 0x00F1 /* BM_SETCHECK */, 0 /* BST_UNCHECKED */, 0);
             EnableWindow(h_top_radio, 1);
             EnableWindow(h_bot_radio, 0);
-            SetWindowTextW(h_top_radio, to_wstr("Mặt TOP").as_ptr());
-            SetWindowTextW(h_bot_radio, to_wstr("Mặt BOTTOM (0 LK)").as_ptr());
 
             if !h_lbl_top.is_null() { ShowWindow(h_lbl_top, 1 /* SW_SHOW */); }
             if !h_edit_top.is_null() { ShowWindow(h_edit_top, 1 /* SW_SHOW */); }
@@ -907,8 +903,6 @@ fn update_layer_and_origin_ui_rust() {
             SendMessageW(h_bot_radio, 0x00F1 /* BM_SETCHECK */, 1 /* BST_CHECKED */, 0);
             EnableWindow(h_top_radio, 0);
             EnableWindow(h_bot_radio, 1);
-            SetWindowTextW(h_top_radio, to_wstr("Mặt TOP (0 LK)").as_ptr());
-            SetWindowTextW(h_bot_radio, to_wstr("Mặt BOTTOM").as_ptr());
 
             if !h_lbl_top.is_null() { ShowWindow(h_lbl_top, 0 /* SW_HIDE */); }
             if !h_edit_top.is_null() { ShowWindow(h_edit_top, 0 /* SW_HIDE */); }
@@ -918,8 +912,6 @@ fn update_layer_and_origin_ui_rust() {
         } else if has_top && has_bot {
             EnableWindow(h_top_radio, 1);
             EnableWindow(h_bot_radio, 1);
-            SetWindowTextW(h_top_radio, to_wstr("Mặt TOP").as_ptr());
-            SetWindowTextW(h_bot_radio, to_wstr("Mặt BOTTOM").as_ptr());
 
             if !h_lbl_top.is_null() { ShowWindow(h_lbl_top, 1 /* SW_SHOW */); }
             if !h_edit_top.is_null() { ShowWindow(h_edit_top, 1 /* SW_SHOW */); }
@@ -928,51 +920,34 @@ fn update_layer_and_origin_ui_rust() {
             if !h_btn_convert.is_null() { SetWindowTextW(h_btn_convert, to_wstr("💾 LƯU CẢ 2 FILE (TOP + BOTTOM) CHO MÁY NEODEN YY1").as_ptr()); }
         }
 
-        let origin_str = match origin_type {
-            OriginTypeRust::BottomLeft => "📍 Gốc: GÓC DƯỚI BÊN TRÁI (X>=0, Y>=0)",
-            OriginTypeRust::BottomRight => "📍 Gốc: GÓC DƯỚI BÊN PHẢI (X<=0, Y>=0)",
-            _ => "⚠️ CẢNH BÁO: GỐC TỌA ĐỘ KHÔNG HỢP LỆ (ở giữa/trong/trên mạch)!",
-        };
-
-        let status_txt = if has_top && has_bot {
-            format!("{} | 📦 2 Mặt (TOP: {} LK, BOT: {} LK)", origin_str, top_len, bot_len)
-        } else if has_top {
-            format!("{} | 📦 Chỉ có Mặt TOP ({} LK)", origin_str, top_len)
-        } else if has_bot {
-            format!("{} | 📦 Chỉ có Mặt BOTTOM ({} LK)", origin_str, bot_len)
-        } else {
-            format!("{} | 📦 Chưa có linh kiện nào", origin_str)
-        };
-
-        if !h_status.is_null() {
-            SetWindowTextW(h_status, to_wstr(&status_txt).as_ptr());
+        let total_comps = top_len + bot_len;
+        if !h_badge.is_null() && !h_detail.is_null() && !h_summary.is_null() {
+            if total_comps == 0 {
+                SetWindowTextW(h_badge, to_wstr("[ -- ] CHƯA CHỌN FILE").as_ptr());
+                SetWindowTextW(h_detail, to_wstr("Vui lòng chọn file Pick & Place (.csv / .txt) từ Altium Designer.").as_ptr());
+                SetWindowTextW(h_summary, to_wstr("").as_ptr());
+            } else if origin_type == OriginTypeRust::BottomLeft {
+                SetWindowTextW(h_badge, to_wstr("[ OK ] GỐC DƯỚI - BÊN TRÁI").as_ptr());
+                SetWindowTextW(h_detail, to_wstr("Tọa độ gốc: Góc Dưới Bên Trái (X >= 0, Y >= 0) • TOP giữ nguyên, BOT = Chiều_Rộng - X").as_ptr());
+                let sum_txt = format!("Mặt TOP: {} LK  |  Mặt BOT: {} LK  |  Tổng: {} LK", top_len, bot_len, total_comps);
+                SetWindowTextW(h_summary, to_wstr(&sum_txt).as_ptr());
+            } else if origin_type == OriginTypeRust::BottomRight {
+                SetWindowTextW(h_badge, to_wstr("[ OK ] GỐC DƯỚI - BÊN PHẢI").as_ptr());
+                SetWindowTextW(h_detail, to_wstr("Tọa độ gốc: Góc Dưới Bên Phải (X <= 0, Y >= 0) • BOT dương hóa |X|, TOP = Chiều_Rộng - |X|").as_ptr());
+                let sum_txt = format!("Mặt TOP: {} LK  |  Mặt BOT: {} LK  |  Tổng: {} LK", top_len, bot_len, total_comps);
+                SetWindowTextW(h_summary, to_wstr(&sum_txt).as_ptr());
+            } else {
+                SetWindowTextW(h_badge, to_wstr("[ ! ] GỐC KHÔNG HỢP LỆ").as_ptr());
+                SetWindowTextW(h_detail, to_wstr("Gốc đang đặt ở giữa/trên mạch (X vừa âm vừa dương hoặc Y < 0). Cần đặt lại trong Altium!").as_ptr());
+                let sum_txt = format!("Mặt TOP: {} LK  |  Mặt BOT: {} LK  |  Tổng: {} LK", top_len, bot_len, total_comps);
+                SetWindowTextW(h_summary, to_wstr(&sum_txt).as_ptr());
+            }
+            InvalidateRect(h_badge, ptr::null(), 1);
+            InvalidateRect(h_detail, ptr::null(), 1);
+            InvalidateRect(h_summary, ptr::null(), 1);
         }
 
-        if origin_type == OriginTypeRust::BottomLeft {
-            let msg = format!(
-                "🎉 KẾT QUẢ NHẬN DIỆN FILE:\n\n\
-                ✔ Tình trạng file: HỢP LỆ (Gốc Chuẩn NeoDen YY1)\n\
-                📍 Vị trí gốc tọa độ: GÓC DƯỚI BÊN TRÁI (Bottom-Left: X >= 0, Y >= 0)\n\n\
-                📦 Dữ liệu phát hiện:\n\
-                • Mặt TOP: {} linh kiện (tọa độ giữ nguyên)\n\
-                • Mặt BOTTOM: {} linh kiện (tự động tính X_bot = Chiều_Rộng - X)\n\n\
-                Toàn bộ 13 thông số máy NeoDen YY1 đã được nạp sẵn sàng!",
-                top_len, bot_len
-            );
-            MessageBoxW(hwnd, to_wstr(&msg).as_ptr(), to_wstr("Nhận Diện File Thành Công").as_ptr(), 0x0040 /* MB_ICONINFORMATION */);
-        } else if origin_type == OriginTypeRust::BottomRight {
-            let msg = format!(
-                "🎉 KẾT QUẢ NHẬN DIỆN FILE:\n\n\
-                ✔ Tình trạng file: HỢP LỆ (Gốc Chuẩn NeoDen YY1)\n\
-                📍 Vị trí gốc tọa độ: GÓC DƯỚI BÊN PHẢI (Bottom-Right: X <= 0, Y >= 0)\n\n\
-                📦 Dữ liệu phát hiện:\n\
-                • Mặt BOTTOM: {} linh kiện (tọa độ dương hóa |X|)\n\
-                • Mặt TOP: {} linh kiện (tự động tính X_top = Chiều_Rộng + X)\n\n\
-                Toàn bộ 13 thông số máy NeoDen YY1 đã được nạp sẵn sàng!",
-                bot_len, top_len
-            );
-            MessageBoxW(hwnd, to_wstr(&msg).as_ptr(), to_wstr("Nhận Diện File Thành Công").as_ptr(), 0x0040 /* MB_ICONINFORMATION */);
-        } else if origin_type == OriginTypeRust::Invalid {
+        if origin_type == OriginTypeRust::Invalid {
             let warn_msg = to_wstr(
                 "⚠️ CẢNH BÁO FILE KHÔNG HỢP LỆ:\n\n\
                 ❌ Tình trạng: Gốc tọa độ đang đặt ở GIỮA MẠCH, TRONG MẠCH hoặc TRÊN MẠCH!\n\
@@ -2246,9 +2221,9 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
             0
         }
         0x0138 => { // WM_CTLCOLORSTATIC
-            let (h_status, h_active_prof, origin_type) = {
+            let (h_status, h_active_prof, h_badge, h_detail, h_summary, origin_type) = {
                 let state = STATE.lock().unwrap();
-                (state.h_status, state.h_lbl_active_profile, state.origin_type)
+                (state.h_status, state.h_lbl_active_profile, state.h_badge_origin, state.h_lbl_origin_detail, state.h_lbl_layer_summary, state.origin_type)
             };
             let hwnd_static = lparam as HWND;
             let hdc_static = wparam as HDC;
@@ -2257,14 +2232,26 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                 SetBkMode(hdc_static, 2 /* OPAQUE */);
                 SetBkColor(hdc_static, GetSysColor(15 /* COLOR_BTNFACE */));
                 return GetSysColorBrush(15) as isize;
-            } else if hwnd_static == h_status {
+            } else if hwnd_static == h_badge {
                 if origin_type == OriginTypeRust::BottomLeft || origin_type == OriginTypeRust::BottomRight {
                     SetTextColor(hdc_static, 0x00577804); // #047857
                 } else if origin_type == OriginTypeRust::Invalid {
-                    SetTextColor(hdc_static, 0x002626DC); // #DC2626
+                    SetTextColor(hdc_static, 0x001C1CB9); // #B91C1C
                 } else {
-                    SetTextColor(hdc_static, 0x003B291E);
+                    SetTextColor(hdc_static, 0x008B7464);
                 }
+                SetBkMode(hdc_static, 1 /* TRANSPARENT */);
+                return GetSysColorBrush(15) as isize;
+            } else if hwnd_static == h_detail {
+                SetTextColor(hdc_static, 0x002A170F); // Slate 900
+                SetBkMode(hdc_static, 1 /* TRANSPARENT */);
+                return GetSysColorBrush(15) as isize;
+            } else if hwnd_static == h_summary {
+                SetTextColor(hdc_static, 0x00BA4E1D); // Blue 700
+                SetBkMode(hdc_static, 1 /* TRANSPARENT */);
+                return GetSysColorBrush(15) as isize;
+            } else if hwnd_static == h_status {
+                SetTextColor(hdc_static, 0x00554133); // Slate 700
                 SetBkMode(hdc_static, 1 /* TRANSPARENT */);
                 return GetSysColorBrush(15) as isize;
             }
@@ -2318,41 +2305,30 @@ fn main() {
             state.font_main_sub = font_main_sub;
         }
 
-        let hinst: HINSTANCE = ptr::null_mut();
+        init_default_feeder_matrix_rust();
 
-        // Splash class
-        let splash_class_name = to_wstr("NeoDenYY1SplashRust");
-        let mut wc_splash: WNDCLASSEXW = std::mem::zeroed();
-        wc_splash.cb_size = std::mem::size_of::<WNDCLASSEXW>() as u32;
-        wc_splash.style = 0x0002 | 0x0001;
-        wc_splash.lpfn_wnd_proc = Some(splash_proc);
-        wc_splash.h_instance = hinst;
-        wc_splash.h_cursor = LoadCursorW(ptr::null_mut(), 32512 as *const u16);
-        wc_splash.lpsz_class_name = splash_class_name.as_ptr();
-        RegisterClassExW(&wc_splash);
+        let hinst = GetModuleHandleW(ptr::null());
+        let class_name = to_wstr("NeoDenYY1RustClass");
+        let splash_class_name = to_wstr("NeoDenYY1SplashClass");
 
-        // Main class
-        let main_class_name = to_wstr("NeoDenYY1GUIRust");
-        let mut wc_main: WNDCLASSEXW = std::mem::zeroed();
-        wc_main.cb_size = std::mem::size_of::<WNDCLASSEXW>() as u32;
-        wc_main.style = 0x0002 | 0x0001;
-        wc_main.lpfn_wnd_proc = Some(wnd_proc);
-        wc_main.h_instance = hinst;
-        wc_main.h_cursor = LoadCursorW(ptr::null_mut(), 32512 as *const u16);
-        wc_main.hbr_background = (15 + 1) as *mut _; // COLOR_BTNFACE + 1
-        wc_main.lpsz_class_name = main_class_name.as_ptr();
+        let mut splash_wc: WNDCLASSEXW = std::mem::zeroed();
+        splash_wc.cb_size = std::mem::size_of::<WNDCLASSEXW>() as u32;
+        splash_wc.style = 0x0002 | 0x0001;
+        splash_wc.lpfn_wnd_proc = Some(splash_proc);
+        splash_wc.h_instance = hinst;
+        splash_wc.h_cursor = LoadCursorW(ptr::null_mut(), 32512 as *const u16);
+        splash_wc.lpsz_class_name = splash_class_name.as_ptr();
+        RegisterClassExW(&splash_wc);
 
-        let mut h_icon_big = LoadImageW(hinst, 1 as *const u16, 1 /* IMAGE_ICON */, 32, 32, 0);
-        if h_icon_big.is_null() { h_icon_big = LoadImageW(ptr::null_mut(), to_wstr("assets/app_icon.ico").as_ptr(), 1, 32, 32, 0x0010); }
-        if h_icon_big.is_null() { h_icon_big = LoadImageW(ptr::null_mut(), to_wstr("app_icon.ico").as_ptr(), 1, 32, 32, 0x0010); }
-
-        let mut h_icon_sm = LoadImageW(hinst, 1 as *const u16, 1, 16, 16, 0);
-        if h_icon_sm.is_null() { h_icon_sm = LoadImageW(ptr::null_mut(), to_wstr("assets/app_icon.ico").as_ptr(), 1, 16, 16, 0x0010); }
-        if h_icon_sm.is_null() { h_icon_sm = LoadImageW(ptr::null_mut(), to_wstr("app_icon.ico").as_ptr(), 1, 16, 16, 0x0010); }
-
-        wc_main.h_icon = h_icon_big;
-        wc_main.h_icon_sm = h_icon_sm;
-        RegisterClassExW(&wc_main);
+        let mut wc: WNDCLASSEXW = std::mem::zeroed();
+        wc.cb_size = std::mem::size_of::<WNDCLASSEXW>() as u32;
+        wc.style = 0x0002 | 0x0001;
+        wc.lpfn_wnd_proc = Some(wnd_proc);
+        wc.h_instance = hinst;
+        wc.h_cursor = LoadCursorW(ptr::null_mut(), 32512 as *const u16);
+        wc.hbr_background = (15 + 1) as HBRUSH;
+        wc.lpsz_class_name = class_name.as_ptr();
+        RegisterClassExW(&wc);
 
         let screen_w = GetSystemMetrics(0);
         let screen_h = GetSystemMetrics(1);
@@ -2362,21 +2338,11 @@ fn main() {
         let win_y = (screen_h - win_h) / 2;
 
         let hwnd = CreateWindowExW(
-            0, main_class_name.as_ptr(), to_wstr("NeoDen YY1 SMT Pick & Place File Converter Pro (Rust Edition) - ChipXa").as_ptr(),
-            (0x00CF0000 & !0x00010000 & !0x00040000) | 0x00000000,
-            win_x, win_y, win_w, win_h, ptr::null_mut(), ptr::null_mut(), hinst, ptr::null_mut()
+            0, class_name.as_ptr(), to_wstr("NeoDen YY1 SMT Pick & Place File Converter Pro (Rust) - ChipXa").as_ptr(),
+            0x00CF0000 & !0x00010000 & !0x00040000,
+            win_x, win_y, win_w, win_h,
+            ptr::null_mut(), ptr::null_mut(), hinst, ptr::null_mut()
         );
-
-        if hwnd.is_null() { return; }
-
-        if !h_icon_big.is_null() {
-            SendMessageW(hwnd, 0x0080, 1, h_icon_big as isize);
-        }
-        if !h_icon_sm.is_null() {
-            SendMessageW(hwnd, 0x0080, 0, h_icon_sm as isize);
-        }
-
-        init_default_feeder_matrix_rust();
 
         let font_normal = CreateFontW(14, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
         let font_bold = CreateFontW(15, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
@@ -2390,42 +2356,53 @@ fn main() {
         let h_lbl_active_profile = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr(&prof_text).as_ptr(), 0x50000001 /* SS_CENTER */, 1050, 42, 290, 22, hwnd, 404 as *mut _, hinst, ptr::null_mut());
         SendMessageW(h_lbl_active_profile, 0x0030, font_bold as usize, 1);
 
-        let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 1. File Altium Pick & Place Đầu Vào ").as_ptr(), 0x50000007, 20, 75, 1320, 70, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 1. File Altium Pick & Place Đầu Vào ").as_ptr(), 0x50000007, 20, 72, 1320, 106, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
         SendMessageW(grp1, 0x0030, font_bold as usize, 1);
 
-        let h_edit_input = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("").as_ptr(), 0x50000080, 35, 102, 1050, 26, hwnd, 101 as *mut _, hinst, ptr::null_mut());
+        let h_edit_input = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("").as_ptr(), 0x50000080, 35, 96, 1050, 26, hwnd, 101 as *mut _, hinst, ptr::null_mut());
         SendMessageW(h_edit_input, 0x0030, font_normal as usize, 1);
 
-        let btn_browse = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Chọn File...").as_ptr(), 0x50000000, 1100, 101, 110, 28, hwnd, 102 as *mut _, hinst, ptr::null_mut());
+        let btn_browse = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Chọn File...").as_ptr(), 0x50000000, 1100, 95, 110, 28, hwnd, 102 as *mut _, hinst, ptr::null_mut());
         SendMessageW(btn_browse, 0x0030, font_normal as usize, 1);
 
-        let btn_reload = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Tải Lại").as_ptr(), 0x50000000, 1220, 101, 90, 28, hwnd, 103 as *mut _, hinst, ptr::null_mut());
+        let btn_reload = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Tải Lại").as_ptr(), 0x50000000, 1220, 95, 90, 28, hwnd, 103 as *mut _, hinst, ptr::null_mut());
         SendMessageW(btn_reload, 0x0030, font_normal as usize, 1);
 
-        let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 2. Toàn Bộ 13 Cột Chuẩn NeoDen YY1 (Nhấp đúp chuột vào dòng để chỉnh sửa) ").as_ptr(), 0x50000007, 20, 155, 1320, 460, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        // Row 2: Thẻ Nhận Diện Trực Quan
+        let h_badge_origin = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("[ -- ] CHƯA CHỌN FILE").as_ptr(), 0x50000001 /* SS_CENTER */, 35, 136, 250, 24, hwnd, 405 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(h_badge_origin, 0x0030, font_bold as usize, 1);
+
+        let h_lbl_origin_detail = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Vui lòng chọn file Pick & Place (.csv / .txt) từ Altium Designer.").as_ptr(), 0x50000000, 295, 139, 560, 20, hwnd, 406 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(h_lbl_origin_detail, 0x0030, font_normal as usize, 1);
+
+        let h_lbl_layer_summary = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("").as_ptr(), 0x50000002 /* SS_RIGHT */, 865, 139, 445, 20, hwnd, 407 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(h_lbl_layer_summary, 0x0030, font_bold as usize, 1);
+
+        // Khoi 2: 13 Cot va Chuyen doi TOP/BOTTOM
+        let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 2. Toàn Bộ 13 Cột Chuẩn NeoDen YY1 (Nhấp đúp chuột vào dòng để chỉnh sửa) ").as_ptr(), 0x50000007, 20, 186, 1320, 440, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
         SendMessageW(grp2, 0x0030, font_bold as usize, 1);
 
-        let h_radio_top = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt TOP").as_ptr(), 0x50000009, 35, 180, 85, 24, hwnd, 401 as *mut _, hinst, ptr::null_mut());
+        let h_radio_top = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt TOP").as_ptr(), 0x50000009, 35, 210, 130, 24, hwnd, 401 as *mut _, hinst, ptr::null_mut());
         SendMessageW(h_radio_top, 0x0030, font_bold as usize, 1);
         SendMessageW(h_radio_top, 0x00F1 /* BM_SETCHECK */, 1, 0);
 
-        let h_radio_bot = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt BOTTOM").as_ptr(), 0x50000009, 125, 180, 105, 24, hwnd, 402 as *mut _, hinst, ptr::null_mut());
+        let h_radio_bot = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt BOTTOM").as_ptr(), 0x50000009, 175, 210, 150, 24, hwnd, 402 as *mut _, hinst, ptr::null_mut());
         SendMessageW(h_radio_bot, 0x0030, font_bold as usize, 1);
 
-        let h_chk_auto_match = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Tự động nhận diện Feeder theo Cấu hình").as_ptr(), 0x50000003 /* BS_AUTOCHECKBOX */, 235, 180, 275, 24, hwnd, 302 as *mut _, hinst, ptr::null_mut());
+        let h_chk_auto_match = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Tự động nhận diện Feeder theo Cấu hình").as_ptr(), 0x50000003 /* BS_AUTOCHECKBOX */, 335, 210, 275, 24, hwnd, 302 as *mut _, hinst, ptr::null_mut());
         SendMessageW(h_chk_auto_match, 0x0030, font_bold as usize, 1);
         SendMessageW(h_chk_auto_match, 0x00F1 /* BM_SETCHECK */, 1, 0);
 
-        let lbl_bw = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chiều rộng bo X (mm):").as_ptr(), 0x50000000, 520, 183, 155, 20, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        let lbl_bw = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chiều rộng bo X (mm):").as_ptr(), 0x50000000, 620, 213, 145, 20, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
         SendMessageW(lbl_bw, 0x0030, font_bold as usize, 1);
 
-        let h_edit_board_width = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("").as_ptr(), 0x50000080, 680, 180, 75, 24, hwnd, 303 as *mut _, hinst, ptr::null_mut());
+        let h_edit_board_width = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("").as_ptr(), 0x50000080, 770, 210, 75, 24, hwnd, 303 as *mut _, hinst, ptr::null_mut());
         SendMessageW(h_edit_board_width, 0x0030, font_bold as usize, 1);
 
-        let h_status = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chưa chọn file CAD nào").as_ptr(), 0x50000000, 765, 183, 560, 20, hwnd, 104 as *mut _, hinst, ptr::null_mut());
-        SendMessageW(h_status, 0x0030, font_bold as usize, 1);
+        let h_status = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chưa chọn file CAD nào").as_ptr(), 0x50000000, 855, 213, 455, 20, hwnd, 104 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(h_status, 0x0030, font_normal as usize, 1);
 
-        let h_list_view = CreateWindowExW(0x00000200, to_wstr("SysListView32").as_ptr(), to_wstr("").as_ptr(), 0x50000001 | 0x0004, 35, 210, 1290, 390, hwnd, 105 as *mut _, hinst, ptr::null_mut());
+        let h_list_view = CreateWindowExW(0x00000200, to_wstr("SysListView32").as_ptr(), to_wstr("").as_ptr(), 0x50000001 | 0x0004, 35, 240, 1290, 375, hwnd, 105 as *mut _, hinst, ptr::null_mut());
         SendMessageW(h_list_view, 0x0030, font_normal as usize, 1);
         SendMessageW(h_list_view, 0x1036 /* LVM_SETEXTENDEDLISTVIEWSTYLE */, 0, 0x00000020 | 0x00000001);
 
@@ -2447,22 +2424,22 @@ fn main() {
             SendMessageW(h_list_view, 0x1061 /* LVM_INSERTCOLUMNW */, i, &col_struct as *const _ as isize);
         }
 
-        let grp3 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 3. Lưu / Xuất File Sau Khi Chỉnh Sửa ").as_ptr(), 0x50000007, 20, 625, 1320, 135, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        let grp3 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 3. Lưu / Xuất File Sau Khi Chỉnh Sửa ").as_ptr(), 0x50000007, 20, 634, 1320, 136, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
         SendMessageW(grp3, 0x0030, font_bold as usize, 1);
 
-        let lbl_top = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Tên file TOP:").as_ptr(), 0x50000000, 35, 652, 90, 20, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        let lbl_top = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Tên file TOP:").as_ptr(), 0x50000000, 35, 660, 110, 20, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
         SendMessageW(lbl_top, 0x0030, font_normal as usize, 1);
 
-        let h_edit_top = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("Top_Output.csv").as_ptr(), 0x50000080, 130, 648, 250, 26, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        let h_edit_top = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("Top_Output.csv").as_ptr(), 0x50000080, 150, 656, 250, 26, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
         SendMessageW(h_edit_top, 0x0030, font_normal as usize, 1);
 
-        let lbl_bot = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Tên file BOTTOM:").as_ptr(), 0x50000000, 420, 652, 120, 20, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        let lbl_bot = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Tên file BOTTOM:").as_ptr(), 0x50000000, 430, 660, 140, 20, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
         SendMessageW(lbl_bot, 0x0030, font_normal as usize, 1);
 
-        let h_edit_bot = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("Bot_Output.csv").as_ptr(), 0x50000080, 550, 648, 250, 26, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+        let h_edit_bot = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("Bot_Output.csv").as_ptr(), 0x50000080, 575, 656, 250, 26, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
         SendMessageW(h_edit_bot, 0x0030, font_normal as usize, 1);
 
-        let btn_convert = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("LƯU FILE ĐÃ CHỈNH SỬA CHO MÁY NEODEN YY1").as_ptr(), 0x50000001, 35, 690, 1290, 48, hwnd, 201 as *mut _, hinst, ptr::null_mut());
+        let btn_convert = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("LƯU FILE ĐÃ CHỈNH SỬA CHO MÁY NEODEN YY1").as_ptr(), 0x50000001, 35, 696, 1290, 48, hwnd, 201 as *mut _, hinst, ptr::null_mut());
         SendMessageW(btn_convert, 0x0030, font_main_title as usize, 1);
 
         {
@@ -2481,6 +2458,9 @@ fn main() {
             state.h_lbl_top = lbl_top;
             state.h_lbl_bot = lbl_bot;
             state.h_btn_convert = btn_convert;
+            state.h_badge_origin = h_badge_origin;
+            state.h_lbl_origin_detail = h_lbl_origin_detail;
+            state.h_lbl_layer_summary = h_lbl_layer_summary;
         }
 
         // Khởi động giao diện sạch sẽ, người dùng tự chọn file cần mở
