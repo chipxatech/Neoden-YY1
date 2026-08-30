@@ -261,6 +261,32 @@ static int compare_components(const void* a, const void* b) {
     return strcmp(ca->designator, cb->designator);
 }
 
+static bool is_valid_component_c(const char* des, const char* cmt) {
+    if (!des || des[0] == '\0' || des[0] == '*' || des[0] == '#' || des[0] == ';') return false;
+    char d_clean[MAX_STR];
+    clean_col_name(des, d_clean, sizeof(d_clean));
+    if (strcmp(d_clean, "designator") == 0 || strcmp(d_clean, "refdes") == 0 || strcmp(d_clean, "pattern") == 0 || strcmp(d_clean, "footprint") == 0) return false;
+
+    char d[MAX_STR];
+    strncpy(d, des, sizeof(d) - 1); d[sizeof(d)-1] = '\0';
+    str_to_lower(d);
+    if (strstr(d, "http:") || strstr(d, "https:") || strstr(d, "www.") || strstr(d, "snapeda") || strstr(d, "://") ||
+        strstr(d, ".com") || strstr(d, ".org") || strstr(d, ".net") || strstr(d, "copyright") || strstr(d, "all rights") || strstr(d, "license")) {
+        return false;
+    }
+    if (strlen(des) > 30 || strchr(des, '/') || strchr(des, '\\')) return false;
+
+    if (cmt && cmt[0]) {
+        char c[MAX_STR];
+        strncpy(c, cmt, sizeof(c) - 1); c[sizeof(c)-1] = '\0';
+        str_to_lower(c);
+        if (strstr(c, "snapeda") || strstr(c, "view-part") || strstr(c, "http://") || strstr(c, "https://") || strstr(c, "www.")) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool read_altium_file(const char* filepath, ComponentList* out_list, char* error_msg, size_t error_msg_size) {
     FILE* f = fopen(filepath, "rb");
     if (!f) {
@@ -368,32 +394,6 @@ bool read_altium_file(const char* filepath, ComponentList* out_list, char* error
             line = strtok(NULL, "\r\n");
             continue;
         }
-
-static bool is_valid_component_c(const char* des, const char* cmt) {
-    if (!des || des[0] == '\0' || des[0] == '*' || des[0] == '#' || des[0] == ';') return false;
-    char d_clean[MAX_STR];
-    clean_col_name(des, d_clean, sizeof(d_clean));
-    if (strcmp(d_clean, "designator") == 0 || strcmp(d_clean, "refdes") == 0 || strcmp(d_clean, "pattern") == 0 || strcmp(d_clean, "footprint") == 0) return false;
-
-    char d[MAX_STR];
-    strncpy(d, des, sizeof(d) - 1); d[sizeof(d)-1] = '\0';
-    str_to_lower(d);
-    if (strstr(d, "http:") || strstr(d, "https:") || strstr(d, "www.") || strstr(d, "snapeda") || strstr(d, "://") ||
-        strstr(d, ".com") || strstr(d, ".org") || strstr(d, ".net") || strstr(d, "copyright") || strstr(d, "all rights") || strstr(d, "license")) {
-        return false;
-    }
-    if (strlen(des) > 30 || strchr(des, '/') || strchr(des, '\\')) return false;
-
-    if (cmt && cmt[0]) {
-        char c[MAX_STR];
-        strncpy(c, cmt, sizeof(c) - 1); c[sizeof(c)-1] = '\0';
-        str_to_lower(c);
-        if (strstr(c, "snapeda") || strstr(c, "view-part") || strstr(c, "http://") || strstr(c, "https://") || strstr(c, "www.")) {
-            return false;
-        }
-    }
-    return true;
-}
 
         size_t num_fields = parse_csv_line(line, fields, 32);
         if (col_des >= 0 && col_des < (int)num_fields) {

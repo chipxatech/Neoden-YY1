@@ -438,6 +438,32 @@ void refreshListView() {
     SetWindowTextW(g_hStatus, statusText);
 }
 
+static bool isValidComponentCpp(const std::wstring& des, const std::wstring& cmt) {
+    if (des.empty() || des[0] == L'*' || des[0] == L'#' || des[0] == L';') return false;
+    std::wstring d_clean = cleanColName(des);
+    if (d_clean == L"designator" || d_clean == L"refdes" || d_clean == L"pattern" || d_clean == L"footprint") return false;
+
+    std::wstring d = toLower(des);
+    if (d.find(L"http:") != std::wstring::npos || d.find(L"https:") != std::wstring::npos || d.find(L"www.") != std::wstring::npos ||
+        d.find(L"snapeda") != std::wstring::npos || d.find(L"://") != std::wstring::npos || d.find(L".com") != std::wstring::npos ||
+        d.find(L".org") != std::wstring::npos || d.find(L".net") != std::wstring::npos || d.find(L"copyright") != std::wstring::npos ||
+        d.find(L"all rights") != std::wstring::npos || d.find(L"license") != std::wstring::npos) {
+        return false;
+    }
+    if (des.length() > 30 || des.find(L'/') != std::wstring::npos || des.find(L'\\') != std::wstring::npos) return false;
+
+    std::wstring c = toLower(cmt);
+    if (c.find(L"snapeda") != std::wstring::npos || c.find(L"view-part") != std::wstring::npos ||
+        c.find(L"http://") != std::wstring::npos || c.find(L"https://") != std::wstring::npos || c.find(L"www.") != std::wstring::npos) {
+        return false;
+    }
+    return true;
+}
+
+static OriginType detectOriginType();
+static void recalcCoordinates();
+static void updateLayerAndOriginUI();
+
 bool loadAltiumData(const std::wstring& filepath) {
     std::ifstream file(ws2s(filepath), std::ios::binary);
     if (!file.is_open()) return false;
@@ -526,28 +552,6 @@ bool loadAltiumData(const std::wstring& filepath) {
             }
             continue;
         }
-
-static bool isValidComponentCpp(const std::wstring& des, const std::wstring& cmt) {
-    if (des.empty() || des[0] == L'*' || des[0] == L'#' || des[0] == L';') return false;
-    std::wstring d_clean = cleanColName(des);
-    if (d_clean == L"designator" || d_clean == L"refdes" || d_clean == L"pattern" || d_clean == L"footprint") return false;
-
-    std::wstring d = toLower(des);
-    if (d.find(L"http:") != std::wstring::npos || d.find(L"https:") != std::wstring::npos || d.find(L"www.") != std::wstring::npos ||
-        d.find(L"snapeda") != std::wstring::npos || d.find(L"://") != std::wstring::npos || d.find(L".com") != std::wstring::npos ||
-        d.find(L".org") != std::wstring::npos || d.find(L".net") != std::wstring::npos || d.find(L"copyright") != std::wstring::npos ||
-        d.find(L"all rights") != std::wstring::npos || d.find(L"license") != std::wstring::npos) {
-        return false;
-    }
-    if (des.length() > 30 || des.find(L'/') != std::wstring::npos || des.find(L'\\') != std::wstring::npos) return false;
-
-    std::wstring c = toLower(cmt);
-    if (c.find(L"snapeda") != std::wstring::npos || c.find(L"view-part") != std::wstring::npos ||
-        c.find(L"http://") != std::wstring::npos || c.find(L"https://") != std::wstring::npos || c.find(L"www.") != std::wstring::npos) {
-        return false;
-    }
-    return true;
-}
 
         auto fields = parseCsvLine(line);
         auto get_val = [&](int idx) -> std::wstring {
@@ -1663,7 +1667,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         SendMessageW(g_hEditTop, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
         g_hLblBot = CreateWindowExW(0, L"STATIC", L"Ten file BOTTOM:", WS_CHILD | WS_VISIBLE, 420, 652, 120, 20, hWnd, NULL, g_hInst, NULL);
-        SendMessageW(hLblBot, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
+        SendMessageW(g_hLblBot, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
         g_hEditBot = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"Bot_Output.csv", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 550, 648, 250, 26, hWnd, NULL, g_hInst, NULL);
         SendMessageW(g_hEditBot, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 

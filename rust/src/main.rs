@@ -38,7 +38,7 @@ struct PAINTSTRUCT {
 struct WNDCLASSEXW {
     cb_size: u32,
     style: u32,
-    lpfn_wnd_proc: unsafe extern "system" fn(HWND, u32, usize, isize) -> isize,
+    lpfn_wnd_proc: Option<unsafe extern "system" fn(HWND, u32, usize, isize) -> isize>,
     cb_cls_extra: i32,
     cb_wnd_extra: i32,
     h_instance: HINSTANCE,
@@ -2257,7 +2257,7 @@ fn main() {
         let mut wc_splash: WNDCLASSEXW = std::mem::zeroed();
         wc_splash.cb_size = std::mem::size_of::<WNDCLASSEXW>() as u32;
         wc_splash.style = 0x0002 | 0x0001;
-        wc_splash.lpfn_wnd_proc = splash_proc;
+        wc_splash.lpfn_wnd_proc = Some(splash_proc);
         wc_splash.h_instance = hinst;
         wc_splash.h_cursor = LoadCursorW(ptr::null_mut(), 32512 as *const u16);
         wc_splash.lpsz_class_name = splash_class_name.as_ptr();
@@ -2268,7 +2268,7 @@ fn main() {
         let mut wc_main: WNDCLASSEXW = std::mem::zeroed();
         wc_main.cb_size = std::mem::size_of::<WNDCLASSEXW>() as u32;
         wc_main.style = 0x0002 | 0x0001;
-        wc_main.lpfn_wnd_proc = wnd_proc;
+        wc_main.lpfn_wnd_proc = Some(wnd_proc);
         wc_main.h_instance = hinst;
         wc_main.h_cursor = LoadCursorW(ptr::null_mut(), 32512 as *const u16);
         wc_main.hbr_background = (15 + 1) as *mut _; // COLOR_BTNFACE + 1
