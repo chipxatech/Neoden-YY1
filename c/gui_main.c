@@ -48,6 +48,8 @@ HWND g_hRadioTop = NULL;
 HWND g_hRadioBot = NULL;
 HWND g_hChkAutoMatch_c = NULL;
 bool g_auto_match_feeder_c = true;
+HWND g_hEditBoardWidth_c = NULL;
+double g_board_width_c = 0.0;
 HFONT g_hFontTitle = NULL;
 HFONT g_hFontNormal = NULL;
 HFONT g_hFontBold = NULL;
@@ -60,6 +62,26 @@ int g_splashProgress = 0;
 bool g_showing_top = true;
 
 ComponentList g_components;
+
+static void recalc_bottom_coordinates_c(void) {
+    wchar_t buf[64] = {0};
+    if (g_hEditBoardWidth_c) {
+        GetWindowTextW(g_hEditBoardWidth_c, buf, 64);
+        g_board_width_c = _wtof(buf);
+    }
+    for (size_t i = 0; i < g_components.count; ++i) {
+        Component* c = &g_components.items[i];
+        bool is_bot = (strstr(c->layer, "Bottom") || strcmp(c->layer, "BottomLayer") == 0 || strstr(c->layer, "bot"));
+        if (is_bot) {
+            if (g_board_width_c > 0.0) {
+                c->mid_x = g_board_width_c - c->raw_mid_x;
+            } else {
+                c->mid_x = c->raw_mid_x;
+            }
+            c->mid_y = c->raw_mid_y;
+        }
+    }
+}
 
 static void refresh_list_view(void) {
     ListView_DeleteAllItems(g_hListView);
@@ -136,6 +158,7 @@ static void load_and_display_data(const wchar_t* wpath) {
         }
     }
 
+    recalc_bottom_coordinates_c();
     refresh_list_view();
 }
 
@@ -144,6 +167,8 @@ static void on_save_clicked(void) {
         MessageBoxW(g_hWnd, L"Chưa có dữ liệu để lưu!", L"Thông Báo", MB_ICONWARNING);
         return;
     }
+
+    recalc_bottom_coordinates_c();
 
     wchar_t w_top[MAX_PATH], w_bot[MAX_PATH];
     GetWindowTextW(g_hEditTop, w_top, MAX_PATH);
@@ -1065,19 +1090,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         HWND hGrp2 = CreateWindowExW(0, L"BUTTON", L" 2. Toan Bo 13 Cot Chuan NeoDen YY1 (Nhap dup chuot vao dong de sua) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 155, 1320, 460, hWnd, NULL, g_hInst, NULL);
         SendMessageW(hGrp2, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        g_hRadioTop = CreateWindowExW(0, L"BUTTON", L"Mat TOP", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP, 35, 180, 95, 24, hWnd, (HMENU)401, g_hInst, NULL);
+        g_hRadioTop = CreateWindowExW(0, L"BUTTON", L"Mat TOP", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP, 35, 180, 85, 24, hWnd, (HMENU)401, g_hInst, NULL);
         SendMessageW(g_hRadioTop, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
         SendMessageW(g_hRadioTop, BM_SETCHECK, BST_CHECKED, 0);
 
-        g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 135, 180, 110, 24, hWnd, (HMENU)402, g_hInst, NULL);
+        g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 125, 180, 105, 24, hWnd, (HMENU)402, g_hInst, NULL);
         SendMessageW(g_hRadioBot, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         // Checkbox Tự động nhận diện Feeder
-        g_hChkAutoMatch_c = CreateWindowExW(0, L"BUTTON", L"Tự động nhận diện Feeder theo Cấu hình", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 255, 180, 310, 24, hWnd, (HMENU)302, g_hInst, NULL);
+        g_hChkAutoMatch_c = CreateWindowExW(0, L"BUTTON", L"Tự động nhận diện Feeder theo Cấu hình", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 235, 180, 275, 24, hWnd, (HMENU)302, g_hInst, NULL);
         SendMessageW(g_hChkAutoMatch_c, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
         SendMessageW(g_hChkAutoMatch_c, BM_SETCHECK, g_auto_match_feeder_c ? BST_CHECKED : BST_UNCHECKED, 0);
 
-        g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 575, 183, 750, 20, hWnd, (HMENU)104, g_hInst, NULL);
+        // Ô Nhập Chiều Rộng Bo Mạch X (mm)
+        HWND hLblBw = CreateWindowExW(0, L"STATIC", L"Chiều rộng bo X (mm):", WS_CHILD | WS_VISIBLE, 520, 183, 155, 20, hWnd, NULL, g_hInst, NULL);
+        SendMessageW(hLblBw, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+        g_hEditBoardWidth_c = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"0.00", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 680, 180, 75, 24, hWnd, (HMENU)303, g_hInst, NULL);
+        SendMessageW(g_hEditBoardWidth_c, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+        g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 765, 183, 560, 20, hWnd, (HMENU)104, g_hInst, NULL);
         SendMessageW(g_hStatus, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         g_hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 35, 210, 1290, 390, hWnd, (HMENU)105, g_hInst, NULL);
@@ -1314,6 +1346,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 }
             }
             refresh_list_view();
+            break;
+        }
+        case 303: { // Ô Nhập Chiều rộng bo X
+            if (HIWORD(wParam) == EN_CHANGE) {
+                recalc_bottom_coordinates_c();
+                if (!g_showing_top) {
+                    refresh_list_view();
+                }
+            }
             break;
         }
         case 401: {

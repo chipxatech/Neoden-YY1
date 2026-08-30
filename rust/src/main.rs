@@ -196,6 +196,8 @@ pub struct Component {
     pub footprint: String,
     pub mid_x: f64,
     pub mid_y: f64,
+    pub raw_mid_x: f64,
+    pub raw_mid_y: f64,
     pub rotation: f64,
     pub head: i32,
     pub feeder_no: i32,
@@ -214,6 +216,8 @@ struct AppState {
     h_edit_input: HWND,
     h_edit_top: HWND,
     h_edit_bot: HWND,
+    h_edit_board_width: HWND,
+    board_width: f64,
     h_list_view: HWND,
     h_status: HWND,
     h_radio_top: HWND,
@@ -242,6 +246,8 @@ static STATE: Mutex<AppState> = Mutex::new(AppState {
     h_edit_input: ptr::null_mut(),
     h_edit_top: ptr::null_mut(),
     h_edit_bot: ptr::null_mut(),
+    h_edit_board_width: ptr::null_mut(),
+    board_width: 0.0,
     h_list_view: ptr::null_mut(),
     h_status: ptr::null_mut(),
     h_radio_top: ptr::null_mut(),
@@ -633,8 +639,10 @@ fn is_valid_component_rust(des: &str, cmt: &str) -> bool {
             let ry: f64 = col_map.get("y").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(0.0);
             let rot: f64 = col_map.get("rot").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(0.0);
 
-            let mid_x = if is_mil { rx * 0.0254 } else { rx };
-            let mid_y = if is_mil { ry * 0.0254 } else { ry };
+            let raw_mid_x = if is_mil { rx * 0.0254 } else { rx };
+            let raw_mid_y = if is_mil { ry * 0.0254 } else { ry };
+            let mid_x = raw_mid_x;
+            let mid_y = raw_mid_y;
 
             let head: i32 = col_map.get("head").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(0);
             let raw_feeder_no: i32 = col_map.get("feeder").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(0);
@@ -657,6 +665,8 @@ fn is_valid_component_rust(des: &str, cmt: &str) -> bool {
                 footprint: fp,
                 mid_x,
                 mid_y,
+                raw_mid_x,
+                raw_mid_y,
                 rotation: rot,
                 head,
                 feeder_no,
@@ -710,11 +720,40 @@ fn is_valid_component_rust(des: &str, cmt: &str) -> bool {
         state.bot_components = bot_raw;
     }
 
+    recalc_bottom_coordinates_rust();
     refresh_list_view();
     true
 }
 
+fn recalc_bottom_coordinates_rust() {
+    let hwnd_bw = {
+        let state = STATE.lock().unwrap();
+        state.h_edit_board_width
+    };
+    if !hwnd_bw.is_null() {
+        let mut buf = [0u16; 64];
+        unsafe {
+            GetWindowTextW(hwnd_bw, buf.as_mut_ptr(), 64);
+        }
+        let s = String::from_utf16_lossy(&buf).trim_matches('\0').trim().to_string();
+        let val = s.parse::<f64>().unwrap_or(0.0);
+        let mut state = STATE.lock().unwrap();
+        state.board_width = val;
+    }
+    let mut state = STATE.lock().unwrap();
+    let bw = state.board_width;
+    for c in &mut state.bot_components {
+        if bw > 0.0 {
+            c.mid_x = bw - c.raw_mid_x;
+        } else {
+            c.mid_x = c.raw_mid_x;
+        }
+        c.mid_y = c.raw_mid_y;
+    }
+}
+
 fn save_outputs() {
+    recalc_bottom_coordinates_rust();
     let (hwnd, h_top, h_bot, top_comps, bot_comps) = {
         let state = STATE.lock().unwrap();
         (state.hwnd, state.h_edit_top, state.h_edit_bot, state.top_components.clone(), state.bot_components.clone())
@@ -1922,6 +1961,16 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                     }
                     refresh_list_view();
                 }
+                303 => { // Board width EN_CHANGE
+                    recalc_bottom_coordinates_rust();
+                    let is_bot = {
+                        let state = STATE.lock().unwrap();
+                        !state.showing_top
+                    };
+                    if is_bot {
+                        refresh_list_view();
+                    }
+                }
                 401 => { // Radio TOP
                     {
                         let mut state = STATE.lock().unwrap();
@@ -2089,18 +2138,24 @@ fn main() {
             let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 2. Toàn Bộ 13 Cột Chuẩn NeoDen YY1 (Nhấp đúp chuột vào dòng để chỉnh sửa) ").as_ptr(), 0x50000007, 20, 155, 1320, 460, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
             SendMessageW(grp2, 0x0030, font_bold as usize, 1);
 
-            state.h_radio_top = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt TOP").as_ptr(), 0x50000009, 35, 180, 95, 24, hwnd, 401 as *mut _, hinst, ptr::null_mut());
+            state.h_radio_top = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt TOP").as_ptr(), 0x50000009, 35, 180, 85, 24, hwnd, 401 as *mut _, hinst, ptr::null_mut());
             SendMessageW(state.h_radio_top, 0x0030, font_bold as usize, 1);
             SendMessageW(state.h_radio_top, 0x00F1 /* BM_SETCHECK */, 1, 0);
 
-            state.h_radio_bot = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt BOTTOM").as_ptr(), 0x50000009, 135, 180, 110, 24, hwnd, 402 as *mut _, hinst, ptr::null_mut());
+            state.h_radio_bot = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt BOTTOM").as_ptr(), 0x50000009, 125, 180, 105, 24, hwnd, 402 as *mut _, hinst, ptr::null_mut());
             SendMessageW(state.h_radio_bot, 0x0030, font_bold as usize, 1);
 
-            state.h_chk_auto_match = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Tự động nhận diện Feeder theo Cấu hình").as_ptr(), 0x50000003 /* BS_AUTOCHECKBOX */, 255, 180, 310, 24, hwnd, 302 as *mut _, hinst, ptr::null_mut());
+            state.h_chk_auto_match = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Tự động nhận diện Feeder theo Cấu hình").as_ptr(), 0x50000003 /* BS_AUTOCHECKBOX */, 235, 180, 275, 24, hwnd, 302 as *mut _, hinst, ptr::null_mut());
             SendMessageW(state.h_chk_auto_match, 0x0030, font_bold as usize, 1);
             SendMessageW(state.h_chk_auto_match, 0x00F1 /* BM_SETCHECK */, 1, 0);
 
-            state.h_status = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chưa chọn file CAD nào").as_ptr(), 0x50000000, 575, 183, 750, 20, hwnd, 104 as *mut _, hinst, ptr::null_mut());
+            let lbl_bw = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chiều rộng bo X (mm):").as_ptr(), 0x50000000, 520, 183, 155, 20, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
+            SendMessageW(lbl_bw, 0x0030, font_bold as usize, 1);
+
+            state.h_edit_board_width = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("0.00").as_ptr(), 0x50000080, 680, 180, 75, 24, hwnd, 303 as *mut _, hinst, ptr::null_mut());
+            SendMessageW(state.h_edit_board_width, 0x0030, font_bold as usize, 1);
+
+            state.h_status = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chưa chọn file CAD nào").as_ptr(), 0x50000000, 765, 183, 560, 20, hwnd, 104 as *mut _, hinst, ptr::null_mut());
             SendMessageW(state.h_status, 0x0030, font_bold as usize, 1);
 
             state.h_list_view = CreateWindowExW(0x00000200, to_wstr("SysListView32").as_ptr(), to_wstr("").as_ptr(), 0x50000001 | 0x0004, 35, 210, 1290, 390, hwnd, 105 as *mut _, hinst, ptr::null_mut());

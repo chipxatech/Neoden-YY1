@@ -30,6 +30,8 @@ struct Component {
     std::wstring footprint;
     double mid_x = 0.0;
     double mid_y = 0.0;
+    double raw_mid_x = 0.0;
+    double raw_mid_y = 0.0;
     double rotation = 0.0;
     int head = 0;
     int feeder_no = 1;
@@ -56,12 +58,14 @@ HWND g_hSplash = NULL;
 HWND g_hEditInput = NULL;
 HWND g_hEditTop = NULL;
 HWND g_hEditBot = NULL;
+HWND g_hEditBoardWidth = NULL;
 HWND g_hListView = NULL;
 HWND g_hStatus = NULL;
 HWND g_hRadioTop = NULL;
 HWND g_hRadioBot = NULL;
 HWND g_hChkAutoMatch = NULL;
 bool g_auto_match_feeder = true;
+double g_board_width = 0.0;
 Gdiplus::Image* g_pLogoImage = NULL;
 ULONG_PTR g_gdiplusToken = 0;
 HFONT g_hFontTitle = NULL;
@@ -564,9 +568,13 @@ static bool isValidComponentCpp(const std::wstring& des, const std::wstring& cmt
             double rx = sx.empty() ? 0.0 : std::stod(sx);
             double ry = sy.empty() ? 0.0 : std::stod(sy);
             comp.rotation = srot.empty() ? 0.0 : std::stod(srot);
-            comp.mid_x = is_mil ? rx * 0.0254 : rx;
-            comp.mid_y = is_mil ? ry * 0.0254 : ry;
+            comp.raw_mid_x = is_mil ? rx * 0.0254 : rx;
+            comp.raw_mid_y = is_mil ? ry * 0.0254 : ry;
+            comp.mid_x = comp.raw_mid_x;
+            comp.mid_y = comp.raw_mid_y;
         } catch (...) {
+            comp.raw_mid_x = 0.0;
+            comp.raw_mid_y = 0.0;
             comp.mid_x = 0.0;
             comp.mid_y = 0.0;
             comp.rotation = 0.0;
@@ -621,8 +629,29 @@ static bool isValidComponentCpp(const std::wstring& des, const std::wstring& cmt
     std::sort(g_top_components.begin(), g_top_components.end(), sort_fn);
     std::sort(g_bot_components.begin(), g_bot_components.end(), sort_fn);
 
+    recalcBottomCoordinates();
     refreshListView();
     return true;
+}
+
+static void recalcBottomCoordinates() {
+    wchar_t buf[64] = {0};
+    if (g_hEditBoardWidth) {
+        GetWindowTextW(g_hEditBoardWidth, buf, 64);
+        try {
+            g_board_width = _wtof(buf);
+        } catch (...) {
+            g_board_width = 0.0;
+        }
+    }
+    for (auto& c : g_bot_components) {
+        if (g_board_width > 0.0) {
+            c.mid_x = g_board_width - c.raw_mid_x;
+        } else {
+            c.mid_x = c.raw_mid_x;
+        }
+        c.mid_y = c.raw_mid_y;
+    }
 }
 
 void doSaveAndExport() {
@@ -630,6 +659,8 @@ void doSaveAndExport() {
         MessageBoxW(g_hWnd, L"Chưa có dữ liệu để lưu!", L"Thông Báo", MB_ICONWARNING);
         return;
     }
+
+    recalcBottomCoordinates();
 
     wchar_t topName[256] = {0}, botName[256] = {0};
     GetWindowTextW(g_hEditTop, topName, 256);
@@ -1401,19 +1432,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         SendMessageW(hGrp2, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         // Radio Chuyen doi Mat TOP / BOTTOM
-        g_hRadioTop = CreateWindowExW(0, L"BUTTON", L"Mat TOP", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP, 35, 180, 95, 24, hWnd, (HMENU)401, g_hInst, NULL);
+        g_hRadioTop = CreateWindowExW(0, L"BUTTON", L"Mat TOP", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP, 35, 180, 85, 24, hWnd, (HMENU)401, g_hInst, NULL);
         SendMessageW(g_hRadioTop, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
         SendMessageW(g_hRadioTop, BM_SETCHECK, BST_CHECKED, 0);
 
-        g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 135, 180, 110, 24, hWnd, (HMENU)402, g_hInst, NULL);
+        g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 125, 180, 105, 24, hWnd, (HMENU)402, g_hInst, NULL);
         SendMessageW(g_hRadioBot, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         // Checkbox Tự động nhận diện Feeder theo cấu hình
-        g_hChkAutoMatch = CreateWindowExW(0, L"BUTTON", L"Tự động nhận diện Feeder theo Cấu hình", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 255, 180, 310, 24, hWnd, (HMENU)302, g_hInst, NULL);
+        g_hChkAutoMatch = CreateWindowExW(0, L"BUTTON", L"Tự động nhận diện Feeder theo Cấu hình", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 235, 180, 275, 24, hWnd, (HMENU)302, g_hInst, NULL);
         SendMessageW(g_hChkAutoMatch, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
         SendMessageW(g_hChkAutoMatch, BM_SETCHECK, g_auto_match_feeder ? BST_CHECKED : BST_UNCHECKED, 0);
 
-        g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 575, 183, 750, 20, hWnd, (HMENU)104, g_hInst, NULL);
+        // Ô Nhập Chiều Rộng Bo Mạch X (mm)
+        HWND hLblBw = CreateWindowExW(0, L"STATIC", L"Chiều rộng bo X (mm):", WS_CHILD | WS_VISIBLE, 520, 183, 155, 20, hWnd, NULL, g_hInst, NULL);
+        SendMessageW(hLblBw, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+        g_hEditBoardWidth = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"0.00", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 680, 180, 75, 24, hWnd, (HMENU)303, g_hInst, NULL);
+        SendMessageW(g_hEditBoardWidth, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+        g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 765, 183, 560, 20, hWnd, (HMENU)104, g_hInst, NULL);
         SendMessageW(g_hStatus, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         g_hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 35, 210, 1290, 390, hWnd, (HMENU)105, g_hInst, NULL);
@@ -1639,6 +1677,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 for (auto& c : g_bot_components) c.feeder_no = c.raw_feeder_no;
             }
             refreshListView();
+            break;
+        }
+        case 303: { // Ô Nhập Chiều rộng bo X
+            if (HIWORD(wParam) == EN_CHANGE) {
+                recalcBottomCoordinates();
+                if (!g_showing_top) {
+                    refreshListView();
+                }
+            }
             break;
         }
         case 401: { // Radio TOP

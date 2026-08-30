@@ -12,6 +12,8 @@ typedef struct {
     char footprint[MAX_STR];
     double mid_x;
     double mid_y;
+    double raw_mid_x;
+    double raw_mid_y;
     double rotation;
     int head;
     int feeder_no;

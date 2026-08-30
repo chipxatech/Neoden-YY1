@@ -429,6 +429,10 @@ static bool is_valid_component_c(const char* des, const char* cmt) {
                 double rx = (col_x >= 0 && col_x < (int)num_fields) ? atof(fields[col_x]) : 0.0;
                 double ry = (col_y >= 0 && col_y < (int)num_fields) ? atof(fields[col_y]) : 0.0;
                 comp.rotation = (col_rot >= 0 && col_rot < (int)num_fields) ? atof(fields[col_rot]) : 0.0;
+                comp.raw_mid_x = is_mil ? rx * 0.0254 : rx;
+                comp.raw_mid_y = is_mil ? ry * 0.0254 : ry;
+                comp.mid_x = comp.raw_mid_x;
+                comp.mid_y = comp.raw_mid_y;
 
                 comp.head = (col_head >= 0 && col_head < (int)num_fields && fields[col_head][0] != '\0') ? atoi(fields[col_head]) : 0;
                 comp.raw_feeder_no = (col_feeder >= 0 && col_feeder < (int)num_fields && fields[col_feeder][0] != '\0') ? atoi(fields[col_feeder]) : 0;

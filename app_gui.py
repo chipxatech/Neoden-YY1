@@ -616,6 +616,12 @@ class NeoDenYY1App:
         )
         chk_match.pack(side=tk.LEFT, padx=15)
         
+        self.board_width_var = tk.StringVar(value="0.00")
+        self.board_width_var.trace_add("write", lambda *args: self.on_board_width_changed())
+        tk.Label(tb_bar, text="Chiều rộng bo X (mm):", font=("Segoe UI", 9, "bold"), fg="#F8FAFC", bg=card_bg).pack(side=tk.LEFT, padx=(10, 2))
+        self.entry_bw = tk.Entry(tb_bar, textvariable=self.board_width_var, width=8, font=("Segoe UI", 9, "bold"), justify=tk.CENTER)
+        self.entry_bw.pack(side=tk.LEFT, padx=(0, 10))
+        
         tk.Button(tb_bar, text="✏️ Sửa dòng đã chọn", font=("Segoe UI", 8, "bold"), bg="#0284C7", fg="white", bd=0, padx=8, pady=3, command=self.edit_selected_row).pack(side=tk.RIGHT, padx=3)
         tk.Button(tb_bar, text="➕ Thêm linh kiện", font=("Segoe UI", 8), bg="#334155", fg="white", bd=0, padx=8, pady=3, command=self.add_component).pack(side=tk.RIGHT, padx=3)
         tk.Button(tb_bar, text="🗑️ Xóa dòng", font=("Segoe UI", 8), bg="#DC2626", fg="white", bd=0, padx=8, pady=3, command=self.delete_selected_row).pack(side=tk.RIGHT, padx=3)
@@ -782,6 +788,24 @@ class NeoDenYY1App:
         selected_tab = self.notebook.index(self.notebook.select())
         self.current_layer = "TOP" if selected_tab == 0 else "BOTTOM"
         
+    def recalc_bottom_coordinates(self):
+        try:
+            bw = float(self.board_width_var.get().strip())
+        except Exception:
+            bw = 0.0
+            
+        for c in self.bot_components:
+            raw_x = c.get("raw_mid_x", c.get("mid_x", 0.0))
+            if bw > 0.0:
+                c["mid_x"] = bw - raw_x
+            else:
+                c["mid_x"] = raw_x
+            c["mid_y"] = c.get("raw_mid_y", c.get("mid_y", 0.0))
+            
+    def on_board_width_changed(self):
+        self.recalc_bottom_coordinates()
+        self.refresh_tables()
+
     def on_auto_match_toggled(self):
         is_auto = self.auto_match_var.get()
         if is_auto:
@@ -1102,8 +1126,10 @@ class NeoDenYY1App:
                 except:
                     raw_x, raw_y, rot = 0.0, 0.0, 0.0
                     
-                mid_x = raw_x * 0.0254 if is_mil else raw_x
-                mid_y = raw_y * 0.0254 if is_mil else raw_y
+                raw_mid_x = raw_x * 0.0254 if is_mil else raw_x
+                raw_mid_y = raw_y * 0.0254 if is_mil else raw_y
+                mid_x = raw_mid_x
+                mid_y = raw_mid_y
                 
                 def_fno, def_head, def_spd = self.find_feeder_no(cmt, fp)
                 
@@ -1143,6 +1169,8 @@ class NeoDenYY1App:
                     "footprint": fp,
                     "mid_x": mid_x,
                     "mid_y": mid_y,
+                    "raw_mid_x": raw_mid_x,
+                    "raw_mid_y": raw_mid_y,
                     "rotation": rot,
                     "head": head,
                     "feeder_no": feeder_no,
@@ -1174,6 +1202,7 @@ class NeoDenYY1App:
                 self.assign_dynamic_feeders(self.top_components)
                 self.assign_dynamic_feeders(self.bot_components)
             
+            self.recalc_bottom_coordinates()
             self.refresh_tables()
             
         except Exception as e:
@@ -1384,6 +1413,7 @@ class NeoDenYY1App:
             messagebox.showwarning("Cảnh Báo", "Chưa có dữ liệu để lưu!")
             return
             
+        self.recalc_bottom_coordinates()
         try:
             header_str = (
                 "NEODEN,YY1,P&P FILE,,,,,,,,,,\r\n"
