@@ -964,9 +964,18 @@ fn update_layer_and_origin_ui_rust() {
 
 fn save_outputs() {
     recalc_coordinates_rust();
-    let (hwnd, h_top, h_bot, top_comps, bot_comps) = {
+    let (hwnd, h_top, h_bot, h_bw, bw, origin_type, top_comps, bot_comps) = {
         let state = STATE.lock().unwrap();
-        (state.hwnd, state.h_edit_top, state.h_edit_bot, state.top_components.clone(), state.bot_components.clone())
+        (
+            state.hwnd,
+            state.h_edit_top,
+            state.h_edit_bot,
+            state.h_edit_board_width,
+            state.board_width,
+            state.origin_type,
+            state.top_components.clone(),
+            state.bot_components.clone(),
+        )
     };
 
     let has_top = !top_comps.is_empty();
@@ -977,6 +986,48 @@ fn save_outputs() {
             MessageBoxW(hwnd, to_wstr("Chưa có dữ liệu để lưu!").as_ptr(), to_wstr("Thông Báo").as_ptr(), 0x0030);
         }
         return;
+    }
+
+    unsafe {
+        if origin_type == OriginTypeRust::BottomLeft && has_bot {
+            if bw <= 0.0 {
+                let msg = to_wstr(
+                    "⚠️ BẮT BUỘC NHẬP CHIỀU RỘNG BO MẠCH X (mm)!\n\n\
+                    • File có gốc tọa độ ở GÓC DƯỚI BÊN TRÁI.\n\
+                    • Để xuất file Mặt BOTTOM đúng chuẩn NeoDen YY1, hệ thống cần Chiều Rộng Bo để lật trục X (X_bot = W - X).\n\n\
+                    Vui lòng nhập Chiều rộng bo X vào ô 'Chiều rộng bo X (mm)' trước khi lưu!"
+                );
+                MessageBoxW(hwnd, msg.as_ptr(), to_wstr("Yêu Cầu Nhập Chiều Rộng Bo X").as_ptr(), 0x0030 /* MB_ICONWARNING */);
+                if !h_bw.is_null() {
+                    SetFocus(h_bw);
+                    SendMessageW(h_bw, 0x00B1 /* EM_SETSEL */, 0, -1);
+                }
+                return;
+            }
+        } else if origin_type == OriginTypeRust::BottomRight && has_top {
+            if bw <= 0.0 {
+                let msg = to_wstr(
+                    "⚠️ BẮT BUỘC NHẬP CHIỀU RỘNG BO MẠCH X (mm)!\n\n\
+                    • File có gốc tọa độ ở GÓC DƯỚI BÊN PHẢI.\n\
+                    • Để xuất file Mặt TOP đúng chuẩn NeoDen YY1, hệ thống cần Chiều Rộng Bo để lật trục X (X_top = W + X).\n\n\
+                    Vui lòng nhập Chiều rộng bo X vào ô 'Chiều rộng bo X (mm)' trước khi lưu!"
+                );
+                MessageBoxW(hwnd, msg.as_ptr(), to_wstr("Yêu Cầu Nhập Chiều Rộng Bo X").as_ptr(), 0x0030 /* MB_ICONWARNING */);
+                if !h_bw.is_null() {
+                    SetFocus(h_bw);
+                    SendMessageW(h_bw, 0x00B1 /* EM_SETSEL */, 0, -1);
+                }
+                return;
+            }
+        } else if origin_type == OriginTypeRust::Invalid {
+            let msg = to_wstr(
+                "⚠️ CẢNH BÁO: Gốc tọa độ file không hợp lệ (ở giữa/trong/trên mạch)!\n\n\
+                Tọa độ xuất ra có thể không chính xác khi nạp vào máy NeoDen YY1.\n\
+                Bạn có chắc chắn vẫn muốn tiếp tục xuất file không?"
+            );
+            let res = MessageBoxW(hwnd, msg.as_ptr(), to_wstr("Xác Nhận Xuất File Khi Gốc Không Hợp Lệ").as_ptr(), 0x0030 | 0x0004 | 0x0100 /* MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2 */);
+            if res != 6 /* IDYES */ { return; }
+        }
     }
 
     let mut w_top = [0u16; 260];

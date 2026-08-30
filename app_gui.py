@@ -1581,6 +1581,49 @@ class NeoDenYY1App:
             return
             
         self.recalc_coordinates()
+
+        # Kiểm tra bắt buộc nhập chiều rộng bo X theo quy chuẩn gốc tọa độ
+        bw_str = self.board_width_var.get().strip() if hasattr(self, "board_width_var") else ""
+        try:
+            bw = float(bw_str) if bw_str else 0.0
+        except ValueError:
+            bw = 0.0
+
+        if self.origin_type == "BOTTOM_LEFT" and has_bot:
+            if bw <= 0.0:
+                messagebox.showwarning(
+                    "Yêu Cầu Nhập Chiều Rộng Bo X",
+                    "⚠️ BẮT BUỘC NHẬP CHIỀU RỘNG BO MẠCH X (mm)!\n\n"
+                    "• File có gốc tọa độ ở GÓC DƯỚI BÊN TRÁI.\n"
+                    "• Để xuất file Mặt BOTTOM đúng chuẩn NeoDen YY1, hệ thống cần Chiều Rộng Bo để lật trục X (X_bot = W - X).\n\n"
+                    "Vui lòng nhập Chiều rộng bo X vào ô 'Chiều rộng bo X (mm)' trước khi lưu!"
+                )
+                if hasattr(self, "entry_bw"):
+                    self.entry_bw.focus_set()
+                    self.entry_bw.select_range(0, tk.END)
+                return
+        elif self.origin_type == "BOTTOM_RIGHT" and has_top:
+            if bw <= 0.0:
+                messagebox.showwarning(
+                    "Yêu Cầu Nhập Chiều Rộng Bo X",
+                    "⚠️ BẮT BUỘC NHẬP CHIỀU RỘNG BO MẠCH X (mm)!\n\n"
+                    "• File có gốc tọa độ ở GÓC DƯỚI BÊN PHẢI.\n"
+                    "• Để xuất file Mặt TOP đúng chuẩn NeoDen YY1, hệ thống cần Chiều Rộng Bo để lật trục X (X_top = W + X).\n\n"
+                    "Vui lòng nhập Chiều rộng bo X vào ô 'Chiều rộng bo X (mm)' trước khi lưu!"
+                )
+                if hasattr(self, "entry_bw"):
+                    self.entry_bw.focus_set()
+                    self.entry_bw.select_range(0, tk.END)
+                return
+        elif self.origin_type == "INVALID":
+            if not messagebox.askyesno(
+                "Xác Nhận Xuất File Khi Gốc Không Hợp Lệ",
+                "⚠️ CẢNH BÁO: Gốc tọa độ file không hợp lệ (ở giữa/trong/trên mạch)!\n\n"
+                "Tọa độ xuất ra có thể không chính xác khi nạp vào máy NeoDen YY1.\n"
+                "Bạn có chắc chắn vẫn muốn tiếp tục xuất file không?"
+            ):
+                return
+
         try:
             header_str = (
                 "NEODEN,YY1,P&P FILE,,,,,,,,,,\r\n"

@@ -857,6 +857,44 @@ void doSaveAndExport() {
 
     recalcCoordinates();
 
+    // Kiểm tra ràng buộc Chiều Rộng Bo X theo quy chuẩn gốc tọa độ
+    if (g_origin_type == ORIGIN_BOTTOM_LEFT && has_bot) {
+        if (g_board_width <= 0.0) {
+            MessageBoxW(g_hWnd,
+                L"⚠️ BẮT BUỘC NHẬP CHIỀU RỘNG BO MẠCH X (mm)!\n\n"
+                L"• File có gốc tọa độ ở GÓC DƯỚI BÊN TRÁI.\n"
+                L"• Để xuất file Mặt BOTTOM đúng chuẩn NeoDen YY1, hệ thống cần Chiều Rộng Bo để lật trục X (X_bot = W - X).\n\n"
+                L"Vui lòng nhập Chiều rộng bo X vào ô 'Chiều rộng bo X (mm)' trước khi lưu!",
+                L"Yêu Cầu Nhập Chiều Rộng Bo X", MB_ICONWARNING);
+            if (g_hEditBoardWidth) {
+                SetFocus(g_hEditBoardWidth);
+                SendMessageW(g_hEditBoardWidth, EM_SETSEL, 0, -1);
+            }
+            return;
+        }
+    } else if (g_origin_type == ORIGIN_BOTTOM_RIGHT && has_top) {
+        if (g_board_width <= 0.0) {
+            MessageBoxW(g_hWnd,
+                L"⚠️ BẮT BUỘC NHẬP CHIỀU RỘNG BO MẠCH X (mm)!\n\n"
+                L"• File có gốc tọa độ ở GÓC DƯỚI BÊN PHẢI.\n"
+                L"• Để xuất file Mặt TOP đúng chuẩn NeoDen YY1, hệ thống cần Chiều Rộng Bo để lật trục X (X_top = W + X).\n\n"
+                L"Vui lòng nhập Chiều rộng bo X vào ô 'Chiều rộng bo X (mm)' trước khi lưu!",
+                L"Yêu Cầu Nhập Chiều Rộng Bo X", MB_ICONWARNING);
+            if (g_hEditBoardWidth) {
+                SetFocus(g_hEditBoardWidth);
+                SendMessageW(g_hEditBoardWidth, EM_SETSEL, 0, -1);
+            }
+            return;
+        }
+    } else if (g_origin_type == ORIGIN_INVALID) {
+        int res = MessageBoxW(g_hWnd,
+            L"⚠️ CẢNH BÁO: Gốc tọa độ file không hợp lệ (ở giữa/trong/trên mạch)!\n\n"
+            L"Tọa độ xuất ra có thể không chính xác khi nạp vào máy NeoDen YY1.\n"
+            L"Bạn có chắc chắn vẫn muốn tiếp tục xuất file không?",
+            L"Xác Nhận Xuất File Khi Gốc Không Hợp Lệ", MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2);
+        if (res != IDYES) return;
+    }
+
     wchar_t topName[256] = {0}, botName[256] = {0};
     if (g_hEditTop) GetWindowTextW(g_hEditTop, topName, 256);
     if (g_hEditBot) GetWindowTextW(g_hEditBot, botName, 256);

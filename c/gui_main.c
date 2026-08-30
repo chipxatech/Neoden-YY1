@@ -308,6 +308,44 @@ static void on_save_clicked(void) {
     bool has_top = (top_count > 0);
     bool has_bot = (bot_count > 0);
 
+    // Kiểm tra ràng buộc Chiều Rộng Bo X theo quy chuẩn gốc tọa độ
+    if (g_origin_type_c == ORIGIN_C_BOTTOM_LEFT && has_bot) {
+        if (g_board_width_c <= 0.0) {
+            MessageBoxW(g_hWnd,
+                L"⚠️ BẮT BUỘC NHẬP CHIỀU RỘNG BO MẠCH X (mm)!\n\n"
+                L"• File có gốc tọa độ ở GÓC DƯỚI BÊN TRÁI.\n"
+                L"• Để xuất file Mặt BOTTOM đúng chuẩn NeoDen YY1, hệ thống cần Chiều Rộng Bo để lật trục X (X_bot = W - X).\n\n"
+                L"Vui lòng nhập Chiều rộng bo X vào ô 'Chiều rộng bo X (mm)' trước khi lưu!",
+                L"Yêu Cầu Nhập Chiều Rộng Bo X", MB_ICONWARNING);
+            if (g_hEditBoardWidth_c) {
+                SetFocus(g_hEditBoardWidth_c);
+                SendMessageW(g_hEditBoardWidth_c, EM_SETSEL, 0, -1);
+            }
+            return;
+        }
+    } else if (g_origin_type_c == ORIGIN_C_BOTTOM_RIGHT && has_top) {
+        if (g_board_width_c <= 0.0) {
+            MessageBoxW(g_hWnd,
+                L"⚠️ BẮT BUỘC NHẬP CHIỀU RỘNG BO MẠCH X (mm)!\n\n"
+                L"• File có gốc tọa độ ở GÓC DƯỚI BÊN PHẢI.\n"
+                L"• Để xuất file Mặt TOP đúng chuẩn NeoDen YY1, hệ thống cần Chiều Rộng Bo để lật trục X (X_top = W + X).\n\n"
+                L"Vui lòng nhập Chiều rộng bo X vào ô 'Chiều rộng bo X (mm)' trước khi lưu!",
+                L"Yêu Cầu Nhập Chiều Rộng Bo X", MB_ICONWARNING);
+            if (g_hEditBoardWidth_c) {
+                SetFocus(g_hEditBoardWidth_c);
+                SendMessageW(g_hEditBoardWidth_c, EM_SETSEL, 0, -1);
+            }
+            return;
+        }
+    } else if (g_origin_type_c == ORIGIN_C_INVALID) {
+        int res = MessageBoxW(g_hWnd,
+            L"⚠️ CẢNH BÁO: Gốc tọa độ file không hợp lệ (ở giữa/trong/trên mạch)!\n\n"
+            L"Tọa độ xuất ra có thể không chính xác khi nạp vào máy NeoDen YY1.\n"
+            L"Bạn có chắc chắn vẫn muốn tiếp tục xuất file không?",
+            L"Xác Nhận Xuất File Khi Gốc Không Hợp Lệ", MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2);
+        if (res != IDYES) return;
+    }
+
     wchar_t w_top[MAX_PATH] = {0}, w_bot[MAX_PATH] = {0};
     if (g_hEditTop) GetWindowTextW(g_hEditTop, w_top, MAX_PATH);
     if (g_hEditBot) GetWindowTextW(g_hEditBot, w_bot, MAX_PATH);
