@@ -1,0 +1,17 @@
+﻿# Build directories
+cpp/build/
+c/build/
+rust/target/
+__pycache__/
+*.pyc
+
+# Temporary build files
+.vs/
+.vscode/
+*.user
+*.obj
+*.pdb
+*.ilk
+*.idb
+*.ipdb
+*.iobj

@@ -1,0 +1,75 @@
+{
+  "description": "NeoDen YY1 Feeder Bank 4-Quadrant Configuration",
+  "author": "CÔNG TY TNHH CÔNG NGHỆ CHIPXA",
+  "quadrants": {
+    "top_left": {
+      "name": "Góc Trên Bên Trái (Top-Left)",
+      "range": [14, 24],
+      "feeders": {
+        "14": { "comment": "", "footprint": "0603", "head": 0, "speed": 100 },
+        "15": { "comment": "", "footprint": "0603", "head": 0, "speed": 100 },
+        "16": { "comment": "", "footprint": "0603", "head": 0, "speed": 100 },
+        "17": { "comment": "", "footprint": "0805", "head": 0, "speed": 100 },
+        "18": { "comment": "", "footprint": "0805", "head": 0, "speed": 100 },
+        "19": { "comment": "", "footprint": "0805", "head": 0, "speed": 100 },
+        "20": { "comment": "", "footprint": "1206", "head": 0, "speed": 100 },
+        "21": { "comment": "", "footprint": "1206", "head": 0, "speed": 100 },
+        "22": { "comment": "", "footprint": "SOT-23", "head": 0, "speed": 100 },
+        "23": { "comment": "", "footprint": "SOT-23", "head": 0, "speed": 100 },
+        "24": { "comment": "", "footprint": "SOD-123", "head": 0, "speed": 100 }
+      }
+    },
+    "top_right": {
+      "name": "Góc Trên Bên Phải (Top-Right)",
+      "range": [40, 50],
+      "feeders": {
+        "40": { "comment": "", "footprint": "SOP-8", "head": 0, "speed": 100 },
+        "41": { "comment": "", "footprint": "SOP-8", "head": 0, "speed": 100 },
+        "42": { "comment": "", "footprint": "SOP-14", "head": 0, "speed": 100 },
+        "43": { "comment": "", "footprint": "SOP-16", "head": 0, "speed": 100 },
+        "44": { "comment": "", "footprint": "QFN-20", "head": 0, "speed": 90 },
+        "45": { "comment": "", "footprint": "QFN-32", "head": 0, "speed": 90 },
+        "46": { "comment": "", "footprint": "LQFP-48", "head": 0, "speed": 80 },
+        "47": { "comment": "", "footprint": "SMA", "head": 0, "speed": 100 },
+        "48": { "comment": "", "footprint": "SMB", "head": 0, "speed": 100 },
+        "49": { "comment": "", "footprint": "SMC", "head": 0, "speed": 100 },
+        "50": { "comment": "", "footprint": "ELECTRO", "head": 0, "speed": 80 }
+      }
+    },
+    "bottom_left": {
+      "name": "Góc Dưới Bên Trái (Bottom-Left)",
+      "range": [1, 13],
+      "feeders": {
+        "1": { "comment": "100nF", "footprint": "0603", "head": 0, "speed": 100 },
+        "2": { "comment": "10k", "footprint": "0603", "head": 0, "speed": 100 },
+        "3": { "comment": "1k", "footprint": "0603", "head": 0, "speed": 100 },
+        "4": { "comment": "4.7k", "footprint": "0603", "head": 0, "speed": 100 },
+        "5": { "comment": "0R", "footprint": "0603", "head": 0, "speed": 100 },
+        "6": { "comment": "22pF", "footprint": "0603", "head": 0, "speed": 100 },
+        "7": { "comment": "1uF", "footprint": "0603", "head": 0, "speed": 100 },
+        "8": { "comment": "10uF", "footprint": "0805", "head": 0, "speed": 100 },
+        "9": { "comment": "47uF", "footprint": "0805", "head": 0, "speed": 100 },
+        "10": { "comment": "LED_RED", "footprint": "0603", "head": 0, "speed": 100 },
+        "11": { "comment": "LED_GREEN", "footprint": "0603", "head": 0, "speed": 100 },
+        "12": { "comment": "100k", "footprint": "0603", "head": 0, "speed": 100 },
+        "13": { "comment": "2.2k", "footprint": "0603", "head": 0, "speed": 100 }
+      }
+    },
+    "bottom_right": {
+      "name": "Góc Dưới Bên Phải (Bottom-Right)",
+      "range": [30, 39],
+      "feeders": {
+        "30": { "comment": "SS34", "footprint": "SMA", "head": 0, "speed": 100 },
+        "31": { "comment": "1N4148", "footprint": "SOD-123", "head": 0, "speed": 100 },
+        "32": { "comment": "S8050", "footprint": "SOT-23", "head": 0, "speed": 100 },
+        "33": { "comment": "S8550", "footprint": "SOT-23", "head": 0, "speed": 100 },
+        "34": { "comment": "AMS1117-3.3", "footprint": "SOT-223", "head": 0, "speed": 90 },
+        "35": { "comment": "AMS1117-5.0", "footprint": "SOT-223", "head": 0, "speed": 90 },
+        "36": { "comment": "BSS138", "footprint": "SOT-23", "head": 0, "speed": 100 },
+        "37": { "comment": "AO3400", "footprint": "SOT-23", "head": 0, "speed": 100 },
+        "38": { "comment": "AO3401", "footprint": "SOT-23", "head": 0, "speed": 100 },
+        "39": { "comment": "CH340C", "footprint": "SOP-16", "head": 0, "speed": 90 }
+      }
+    }
+  }
+}
