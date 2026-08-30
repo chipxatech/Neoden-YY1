@@ -101,7 +101,7 @@ static void refresh_list_view(void) {
         swprintf(buf, 64, L"%.2f", c->pick_height); ListView_SetItemText(g_hListView, (int)shown_count, 10, buf);
         swprintf(buf, 64, L"%.2f", c->place_height); ListView_SetItemText(g_hListView, (int)shown_count, 11, buf);
         swprintf(buf, 64, L"%d", c->mode); ListView_SetItemText(g_hListView, (int)shown_count, 12, buf);
-        ListView_SetItemText(g_hListView, (int)shown_count, 13, (LPWSTR)L"");
+        ListView_SetItemText(g_hListView, (int)shown_count, 13, (LPWSTR)(c->skip ? L"1" : L"0"));
 
         shown_count++;
     }
@@ -407,13 +407,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             if (is_top == g_showing_top) {
                                 if ((int)match_idx == item) {
                                     if (c->skip != 0) {
-                                        // BẬT: Khối Màu Đỏ Nổi Bật
+                                        // BẬT (1): Khối Màu Đỏ Nổi Bật, Chữ Trắng
                                         lplvcd->clrTextBk = RGB(220, 38, 38);
-                                        lplvcd->clrText = RGB(220, 38, 38);
+                                        lplvcd->clrText = RGB(255, 255, 255);
                                     } else {
-                                        // TẮT: Khối Màu Đen
+                                        // TẮT (0): Khối Màu Đen, Chữ Sáng
                                         lplvcd->clrTextBk = RGB(20, 24, 34);
-                                        lplvcd->clrText = RGB(20, 24, 34);
+                                        lplvcd->clrText = RGB(226, 232, 240);
                                     }
                                     break;
                                 }

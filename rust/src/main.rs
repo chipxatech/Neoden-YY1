@@ -383,7 +383,7 @@ fn refresh_list_view() {
             set_sub(10, &format!("{:.2}", c.pick_height));
             set_sub(11, &format!("{:.2}", c.place_height));
             set_sub(12, &format!("{}", c.mode));
-            set_sub(13, "");
+            set_sub(13, &format!("{}", c.skip));
         }
 
         let status_txt = format!(
@@ -810,16 +810,16 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                                     (state.showing_top, state.top_components.len(), state.bot_components.len(), is_skip)
                                 };
                                 if is_skip {
-                                    // BẬT: Khối Màu Đỏ Nổi Bật
+                                    // BẬT (1): Khối Màu Đỏ Nổi Bật, Chữ Trắng
                                     unsafe {
                                         (*pcustom).clr_text_bk = 0x002626DC; // BGR for RGB(220, 38, 38)
-                                        (*pcustom).clr_text = 0x002626DC;
+                                        (*pcustom).clr_text = 0x00FFFFFF;
                                     }
                                 } else {
-                                    // TẮT: Khối Màu Đen
+                                    // TẮT (0): Khối Màu Đen, Chữ Sáng
                                     unsafe {
                                         (*pcustom).clr_text_bk = 0x00221814; // BGR for RGB(20, 24, 34)
-                                        (*pcustom).clr_text = 0x00221814;
+                                        (*pcustom).clr_text = 0x00F0E8E2;
                                     }
                                 }
                             }
