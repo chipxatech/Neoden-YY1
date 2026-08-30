@@ -134,11 +134,35 @@ std::wstring trim(const std::wstring& s) {
 }
 
 std::wstring toLower(std::wstring s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](wchar_t c){ return towlower(c); });
+    std::transform(s.begin(), s.end(), s.begin(), [](wchar_t c){ return (wchar_t)towlower(c); });
     return s;
 }
 
+static std::wstring cleanColName(const std::wstring& s) {
+    std::wstring out;
+    for (wchar_t c : s) {
+        if (iswalnum(c)) {
+            out += (wchar_t)towlower(c);
+        }
+    }
+    return out;
+}
+
 std::vector<std::wstring> parseCsvLine(const std::wstring& line) {
+    wchar_t delimiter = L',';
+    int commas = 0, semis = 0, tabs = 0;
+    bool in_q = false;
+    for (wchar_t ch : line) {
+        if (ch == L'"') in_q = !in_q;
+        else if (!in_q) {
+            if (ch == L',') commas++;
+            else if (ch == L';') semis++;
+            else if (ch == L'\t') tabs++;
+        }
+    }
+    if (tabs > commas && tabs > semis) delimiter = L'\t';
+    else if (semis > commas && semis > tabs) delimiter = L';';
+
     std::vector<std::wstring> fields;
     std::wstring current = L"";
     bool in_quotes = false;
@@ -152,7 +176,7 @@ std::vector<std::wstring> parseCsvLine(const std::wstring& line) {
             } else {
                 in_quotes = !in_quotes;
             }
-        } else if (ch == L',' && !in_quotes) {
+        } else if (ch == delimiter && !in_quotes) {
             fields.push_back(trim(current));
             current.clear();
         } else {
@@ -302,6 +326,12 @@ bool loadAltiumData(const std::wstring& filepath) {
     std::stringstream buffer;
     buffer << file.rdbuf();
     std::string raw = buffer.str();
+
+    // Bỏ qua UTF-8 BOM nếu có
+    if (raw.size() >= 3 && (unsigned char)raw[0] == 0xEF && (unsigned char)raw[1] == 0xBB && (unsigned char)raw[2] == 0xBF) {
+        raw = raw.substr(3);
+    }
+
     std::wstring content = s2ws(raw);
 
     g_top_components.clear();
@@ -314,32 +344,66 @@ bool loadAltiumData(const std::wstring& filepath) {
 
     int col_des = -1, col_cmt = -1, col_layer = -1, col_fp = -1;
     int col_x = -1, col_y = -1, col_rot = -1;
+    int col_head = -1, col_feeder = -1, col_speed = -1, col_pick = -1, col_place = -1, col_mode = -1, col_skip = -1;
 
     while (std::getline(stream, line)) {
         if (!line.empty() && line.back() == L'\r') line.pop_back();
         if (line.empty()) continue;
 
-        if (toLower(line).find(L"units used: mil") != std::wstring::npos) is_mil = true;
+        std::wstring line_l = toLower(line);
+        if (line_l.find(L"units used: mil") != std::wstring::npos || line_l.find(L"unit: mil") != std::wstring::npos || line_l.find(L"(mil)") != std::wstring::npos) {
+            is_mil = true;
+        }
 
         if (!header_found) {
-            if (line.find(L"Designator") != std::wstring::npos && line.find(L"Comment") != std::wstring::npos) {
-                header_found = true;
-                auto cols = parseCsvLine(line);
-                for (size_t i = 0; i < cols.size(); ++i) {
-                    std::wstring c = toLower(cols[i]);
-                    if (c == L"designator") col_des = (int)i;
-                    else if (c == L"comment") col_cmt = (int)i;
-                    else if (c == L"layer") col_layer = (int)i;
-                    else if (c == L"footprint") col_fp = (int)i;
-                    else if (c.rfind(L"center-x", 0) == 0 || c.rfind(L"mid x", 0) == 0) {
-                        col_x = (int)i;
-                        if (c.find(L"mil") != std::wstring::npos) is_mil = true;
-                    } else if (c.rfind(L"center-y", 0) == 0 || c.rfind(L"mid y", 0) == 0) {
-                        col_y = (int)i;
-                    } else if (c.rfind(L"rotation", 0) == 0) {
-                        col_rot = (int)i;
+            auto cols = parseCsvLine(line);
+            int temp_des = -1, temp_cmt = -1, temp_fp = -1, temp_x = -1, temp_y = -1, temp_rot = -1, temp_layer = -1;
+            int temp_head = -1, temp_feeder = -1, temp_speed = -1, temp_pick = -1, temp_place = -1, temp_mode = -1, temp_skip = -1;
+
+            for (size_t i = 0; i < cols.size(); ++i) {
+                std::wstring k = cleanColName(cols[i]);
+                std::wstring raw_lower = toLower(cols[i]);
+
+                if (k == L"designator" || k == L"refdes" || k == L"ref" || k == L"reference" || k == L"part" || k == L"comp" || k == L"name" || k == L"tag" || k == L"item") {
+                    if (temp_des == -1) temp_des = static_cast<int>(i);
+                } else if (k == L"comment" || k == L"val" || k == L"value" || k == L"description" || k == L"device" || k == L"component") {
+                    if (temp_cmt == -1) temp_cmt = static_cast<int>(i);
+                } else if (k == L"footprint" || k == L"package" || k == L"pattern" || k == L"pkg" || k == L"fp") {
+                    if (temp_fp == -1) temp_fp = static_cast<int>(i);
+                } else if (k == L"midx" || k == L"centerx" || k == L"posx" || k == L"x" || k == L"midxmm" || k == L"centerxmm" || k == L"posxmm" || k == L"padx" || k == L"xmid") {
+                    if (temp_x == -1) {
+                        temp_x = static_cast<int>(i);
+                        if (raw_lower.find(L"mil") != std::wstring::npos || raw_lower.find(L"inch") != std::wstring::npos) is_mil = true;
                     }
+                } else if (k == L"midy" || k == L"centery" || k == L"posy" || k == L"y" || k == L"midymm" || k == L"centerymm" || k == L"posymm" || k == L"pady" || k == L"ymid") {
+                    if (temp_y == -1) temp_y = static_cast<int>(i);
+                } else if (k == L"rotation" || k == L"rot" || k == L"angle" || k == L"orientation" || k == L"rotate") {
+                    if (temp_rot == -1) temp_rot = static_cast<int>(i);
+                } else if (k == L"layer" || k == L"side" || k == L"face" || k == L"tb" || k == L"topbottom") {
+                    if (temp_layer == -1) temp_layer = static_cast<int>(i);
+                } else if (k == L"head" || k == L"nozzle" || k == L"headno") {
+                    if (temp_head == -1) temp_head = static_cast<int>(i);
+                } else if (k == L"feederno" || k == L"feeder" || k == L"slot" || k == L"stack") {
+                    if (temp_feeder == -1) temp_feeder = static_cast<int>(i);
+                } else if (k == L"mountspeed" || k == L"speed" || k == L"velocity") {
+                    if (temp_speed == -1) temp_speed = static_cast<int>(i);
+                } else if (k == L"pickheight" || k == L"pick" || k == L"pickheightmm") {
+                    if (temp_pick == -1) temp_pick = static_cast<int>(i);
+                } else if (k == L"placeheight" || k == L"place" || k == L"placeheightmm") {
+                    if (temp_place == -1) temp_place = static_cast<int>(i);
+                } else if (k == L"mode" || k == L"visionmode") {
+                    if (temp_mode == -1) temp_mode = static_cast<int>(i);
+                } else if (k == L"skip" || k == L"enable" || k == L"active") {
+                    if (temp_skip == -1) temp_skip = static_cast<int>(i);
                 }
+            }
+
+            if (temp_des != -1 && (temp_x != -1 || temp_cmt != -1 || temp_fp != -1)) {
+                header_found = true;
+                col_des = temp_des; col_cmt = temp_cmt; col_fp = temp_fp;
+                col_x = temp_x; col_y = temp_y; col_rot = temp_rot; col_layer = temp_layer;
+                col_head = temp_head; col_feeder = temp_feeder; col_speed = temp_speed;
+                col_pick = temp_pick; col_place = temp_place; col_mode = temp_mode; col_skip = temp_skip;
             }
             continue;
         }
@@ -351,36 +415,68 @@ bool loadAltiumData(const std::wstring& filepath) {
         };
 
         std::wstring des = get_val(col_des);
-        if (des.empty() || des[0] == L'*') continue;
+        if (des.empty() || des[0] == L'*' || des[0] == L'#' || des[0] == L';') continue;
+        if (cleanColName(des) == L"designator" || cleanColName(des) == L"refdes") continue;
 
         Component comp;
         comp.designator = des;
         comp.comment = normalizeComment(get_val(col_cmt));
         comp.footprint = normalizeFootprint(get_val(col_fp));
-        comp.layer = get_val(col_layer);
+
+        std::wstring raw_layer = toLower(get_val(col_layer));
+        if (raw_layer.find(L"bottom") != std::wstring::npos || raw_layer.find(L"bot") != std::wstring::npos || raw_layer == L"b" || raw_layer.find(L"back") != std::wstring::npos) {
+            comp.layer = L"BottomLayer";
+        } else {
+            comp.layer = L"TopLayer";
+        }
 
         try {
-            double rx = get_val(col_x).empty() ? 0.0 : std::stod(get_val(col_x));
-            double ry = get_val(col_y).empty() ? 0.0 : std::stod(get_val(col_y));
-            comp.rotation = get_val(col_rot).empty() ? 0.0 : std::stod(get_val(col_rot));
+            std::wstring sx = get_val(col_x);
+            std::wstring sy = get_val(col_y);
+            std::wstring srot = get_val(col_rot);
+
+            double rx = sx.empty() ? 0.0 : std::stod(sx);
+            double ry = sy.empty() ? 0.0 : std::stod(sy);
+            comp.rotation = srot.empty() ? 0.0 : std::stod(srot);
             comp.mid_x = is_mil ? rx * 0.0254 : rx;
             comp.mid_y = is_mil ? ry * 0.0254 : ry;
-        } catch (...) { continue; }
+        } catch (...) {
+            comp.mid_x = 0.0;
+            comp.mid_y = 0.0;
+            comp.rotation = 0.0;
+        }
 
-        comp.feeder_no = matchFeederSlot(comp.comment, comp.footprint);
-        comp.head = 0;
-        comp.mount_speed = 100;
-        comp.pick_height = 0.0;
-        comp.place_height = 0.0;
-        comp.mode = 1;
-        comp.skip = 0;
+        if (col_feeder != -1 && !get_val(col_feeder).empty()) comp.feeder_no = _wtoi(get_val(col_feeder).c_str());
+        else comp.feeder_no = matchFeederSlot(comp.comment, comp.footprint);
 
-        std::wstring l = toLower(comp.layer);
-        if (l.find(L"bottom") != std::wstring::npos || l.find(L"bot") != std::wstring::npos || l == L"b") {
+        if (col_head != -1 && !get_val(col_head).empty()) comp.head = _wtoi(get_val(col_head).c_str());
+        else comp.head = 0;
+
+        if (col_speed != -1 && !get_val(col_speed).empty()) comp.mount_speed = _wtoi(get_val(col_speed).c_str());
+        else comp.mount_speed = 100;
+
+        if (col_pick != -1 && !get_val(col_pick).empty()) comp.pick_height = _wtof(get_val(col_pick).c_str());
+        else comp.pick_height = 0.0;
+
+        if (col_place != -1 && !get_val(col_place).empty()) comp.place_height = _wtof(get_val(col_place).c_str());
+        else comp.place_height = 0.0;
+
+        if (col_mode != -1 && !get_val(col_mode).empty()) comp.mode = _wtoi(get_val(col_mode).c_str());
+        else comp.mode = 1;
+
+        if (col_skip != -1 && !get_val(col_skip).empty()) comp.skip = _wtoi(get_val(col_skip).c_str());
+        else comp.skip = 0;
+
+        if (comp.layer == L"BottomLayer") {
             g_bot_components.push_back(comp);
         } else {
             g_top_components.push_back(comp);
         }
+    }
+
+    if (!header_found || (g_top_components.empty() && g_bot_components.empty())) {
+        MessageBoxW(g_hWnd, L"Không thể đọc linh kiện từ file! Vui lòng kiểm tra định dạng CSV/TXT.", L"Lỗi Định Dạng", MB_ICONERROR);
+        return false;
     }
 
     auto sort_fn = [](const Component& a, const Component& b) {

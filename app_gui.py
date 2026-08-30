@@ -719,6 +719,25 @@ class NeoDenYY1App:
                 
         return 1, 0, 100
         
+    def clean_col_name(self, s):
+        return "".join(c.lower() for c in s if c.isalnum())
+
+    def parse_csv_line(self, line):
+        commas = line.count(",")
+        semis = line.count(";")
+        tabs = line.count("\t")
+        delimiter = ","
+        if tabs > commas and tabs > semis: delimiter = "\t"
+        elif semis > commas and semis > tabs: delimiter = ";"
+
+        try:
+            reader = csv.reader([line], delimiter=delimiter)
+            for row in reader:
+                return [c.strip() for c in row]
+        except Exception:
+            pass
+        return [c.strip().strip('"') for c in line.split(delimiter)]
+
     def load_altium_data(self):
         filepath = self.input_file.get().strip()
         if not filepath or not os.path.exists(filepath):
@@ -726,37 +745,72 @@ class NeoDenYY1App:
             
         try:
             with open(filepath, "rb") as f:
-                content = f.read().decode("utf-8-sig", errors="ignore")
+                raw_bytes = f.read()
+            
+            content = ""
+            for enc in ["utf-8-sig", "utf-8", "cp1252", "latin-1"]:
+                try:
+                    content = raw_bytes.decode(enc)
+                    break
+                except Exception:
+                    continue
+            if not content:
+                content = raw_bytes.decode("utf-8", errors="ignore")
                 
             lines = content.splitlines()
             header_idx = None
             is_mil = False
+            col_map = {}
             
             for i, line in enumerate(lines):
-                if "units used: mil" in line.lower():
+                line_l = line.lower()
+                if "units used: mil" in line_l or "unit: mil" in line_l or "(mil)" in line_l:
                     is_mil = True
-                if "designator" in line.lower() and "comment" in line.lower():
+                    
+                cols = self.parse_csv_line(line)
+                temp_map = {}
+                for idx, c in enumerate(cols):
+                    k = self.clean_col_name(c)
+                    raw_lower = c.lower()
+                    if k in ["designator", "refdes", "ref", "reference", "part", "comp", "name", "tag", "item"]:
+                        if "designator" not in temp_map: temp_map["designator"] = idx
+                    elif k in ["comment", "val", "value", "description", "device", "component"]:
+                        if "comment" not in temp_map: temp_map["comment"] = idx
+                    elif k in ["footprint", "package", "pattern", "pkg", "fp"]:
+                        if "footprint" not in temp_map: temp_map["footprint"] = idx
+                    elif k in ["midx", "centerx", "posx", "x", "midxmm", "centerxmm", "posxmm", "padx", "xmid"]:
+                        if "x" not in temp_map:
+                            temp_map["x"] = idx
+                            if "mil" in raw_lower or "inch" in raw_lower: is_mil = True
+                    elif k in ["midy", "centery", "posy", "y", "midymm", "centerymm", "posymm", "pady", "ymid"]:
+                        if "y" not in temp_map: temp_map["y"] = idx
+                    elif k in ["rotation", "rot", "angle", "orientation", "rotate"]:
+                        if "rot" not in temp_map: temp_map["rot"] = idx
+                    elif k in ["layer", "side", "face", "tb", "topbottom"]:
+                        if "layer" not in temp_map: temp_map["layer"] = idx
+                    elif k in ["head", "nozzle", "headno"]:
+                        if "head" not in temp_map: temp_map["head"] = idx
+                    elif k in ["feederno", "feeder", "slot", "stack"]:
+                        if "feeder" not in temp_map: temp_map["feeder"] = idx
+                    elif k in ["mountspeed", "speed", "velocity"]:
+                        if "speed" not in temp_map: temp_map["speed"] = idx
+                    elif k in ["pickheight", "pick", "pickheightmm"]:
+                        if "pick" not in temp_map: temp_map["pick"] = idx
+                    elif k in ["placeheight", "place", "placeheightmm"]:
+                        if "place" not in temp_map: temp_map["place"] = idx
+                    elif k in ["mode", "visionmode"]:
+                        if "mode" not in temp_map: temp_map["mode"] = idx
+                    elif k in ["skip", "enable", "active"]:
+                        if "skip" not in temp_map: temp_map["skip"] = idx
+
+                if "designator" in temp_map and ("x" in temp_map or "comment" in temp_map or "footprint" in temp_map):
                     header_idx = i
+                    col_map = temp_map
                     break
                     
             if header_idx is None:
-                messagebox.showerror("Lỗi Định Dạng", "Không tìm thấy dòng Header chứa 'Designator' và 'Comment' trong file!")
+                messagebox.showerror("Lỗi Định Dạng", "Không tìm thấy dòng Header chứa thông tin linh kiện trong file!")
                 return
-                
-            header_cols = [c.strip().strip('"') for c in lines[header_idx].split(",")]
-            col_map = {}
-            for idx, c in enumerate(header_cols):
-                cl = c.lower()
-                if "designator" in cl: col_map["designator"] = idx
-                elif "comment" in cl: col_map["comment"] = idx
-                elif "layer" in cl: col_map["layer"] = idx
-                elif "footprint" in cl: col_map["footprint"] = idx
-                elif cl.startswith("center-x") or cl.startswith("mid x"):
-                    col_map["x"] = idx
-                    if "mil" in cl: is_mil = True
-                elif cl.startswith("center-y") or cl.startswith("mid y"):
-                    col_map["y"] = idx
-                elif cl.startswith("rotation"): col_map["rot"] = idx
                 
             raw_top = []
             raw_bot = []
@@ -770,27 +824,59 @@ class NeoDenYY1App:
                     continue
                     
                 des = parts[col_map["designator"]].strip()
-                if not des or des.startswith("*"):
+                if not des or des.startswith("*") or des.startswith("#") or des.startswith(";"):
+                    continue
+                if self.clean_col_name(des) in ["designator", "refdes"]:
                     continue
                     
                 cmt_raw = parts[col_map["comment"]].strip() if "comment" in col_map and col_map["comment"] < len(parts) else ""
                 fp_raw = parts[col_map["footprint"]].strip() if "footprint" in col_map and col_map["footprint"] < len(parts) else "0603D"
-                layer = parts[col_map["layer"]].strip() if "layer" in col_map and col_map["layer"] < len(parts) else "TopLayer"
+                layer_raw = parts[col_map["layer"]].strip().lower() if "layer" in col_map and col_map["layer"] < len(parts) else "toplayer"
+                
+                layer = "BottomLayer" if ("bot" in layer_raw or "back" in layer_raw or layer_raw == "b") else "TopLayer"
                 
                 cmt = self.normalize_comment(cmt_raw)
                 fp = self.normalize_footprint(fp_raw)
                 
                 try:
-                    raw_x = float(parts[col_map["x"]]) if "x" in col_map and col_map["x"] < len(parts) else 0.0
-                    raw_y = float(parts[col_map["y"]]) if "y" in col_map and col_map["y"] < len(parts) else 0.0
-                    rot = float(parts[col_map["rot"]]) if "rot" in col_map and col_map["rot"] < len(parts) else 0.0
+                    raw_x = float(parts[col_map["x"]]) if "x" in col_map and col_map["x"] < len(parts) and parts[col_map["x"]] != "" else 0.0
+                    raw_y = float(parts[col_map["y"]]) if "y" in col_map and col_map["y"] < len(parts) and parts[col_map["y"]] != "" else 0.0
+                    rot = float(parts[col_map["rot"]]) if "rot" in col_map and col_map["rot"] < len(parts) and parts[col_map["rot"]] != "" else 0.0
                 except:
                     raw_x, raw_y, rot = 0.0, 0.0, 0.0
                     
                 mid_x = raw_x * 0.0254 if is_mil else raw_x
                 mid_y = raw_y * 0.0254 if is_mil else raw_y
                 
-                f_no, head, spd = self.find_feeder_no(cmt, fp)
+                def_fno, def_head, def_spd = self.find_feeder_no(cmt, fp)
+                
+                try:
+                    head = int(parts[col_map["head"]]) if "head" in col_map and col_map["head"] < len(parts) and parts[col_map["head"]] != "" else def_head
+                except: head = def_head
+                
+                try:
+                    feeder_no = int(parts[col_map["feeder"]]) if "feeder" in col_map and col_map["feeder"] < len(parts) and parts[col_map["feeder"]] != "" else def_fno
+                except: feeder_no = def_fno
+                
+                try:
+                    mount_speed = int(parts[col_map["speed"]]) if "speed" in col_map and col_map["speed"] < len(parts) and parts[col_map["speed"]] != "" else def_spd
+                except: mount_speed = def_spd
+                
+                try:
+                    pick_height = float(parts[col_map["pick"]]) if "pick" in col_map and col_map["pick"] < len(parts) and parts[col_map["pick"]] != "" else 0.0
+                except: pick_height = 0.0
+                
+                try:
+                    place_height = float(parts[col_map["place"]]) if "place" in col_map and col_map["place"] < len(parts) and parts[col_map["place"]] != "" else 0.0
+                except: place_height = 0.0
+                
+                try:
+                    mode = int(parts[col_map["mode"]]) if "mode" in col_map and col_map["mode"] < len(parts) and parts[col_map["mode"]] != "" else 1
+                except: mode = 1
+                
+                try:
+                    skip = int(parts[col_map["skip"]]) if "skip" in col_map and col_map["skip"] < len(parts) and parts[col_map["skip"]] != "" else 0
+                except: skip = 0
                 
                 comp = {
                     "designator": des,
@@ -800,12 +886,12 @@ class NeoDenYY1App:
                     "mid_y": mid_y,
                     "rotation": rot,
                     "head": head,
-                    "feeder_no": f_no,
-                    "mount_speed": spd,
-                    "pick_height": 0.0,
-                    "place_height": 0.0,
-                    "mode": 1,
-                    "skip": 0,
+                    "feeder_no": feeder_no,
+                    "mount_speed": mount_speed,
+                    "pick_height": pick_height,
+                    "place_height": place_height,
+                    "mode": mode,
+                    "skip": skip,
                     "layer": layer
                 }
                 
@@ -814,15 +900,19 @@ class NeoDenYY1App:
                 else:
                     raw_top.append(comp)
                     
+            if not raw_top and not raw_bot:
+                messagebox.showerror("Lỗi Đọc File", "Không tìm thấy linh kiện hợp lệ trong file CSV/TXT!")
+                return
+
             raw_top.sort(key=self.natural_sort_key)
             raw_bot.sort(key=self.natural_sort_key)
             
             self.top_components = raw_top
             self.bot_components = raw_bot
             
-            # Phân phối Feeder tự động nếu chưa có trong matrix
-            self.assign_dynamic_feeders(self.top_components)
-            self.assign_dynamic_feeders(self.bot_components)
+            if "feeder" not in col_map:
+                self.assign_dynamic_feeders(self.top_components)
+                self.assign_dynamic_feeders(self.bot_components)
             
             self.refresh_tables()
             

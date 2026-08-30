@@ -442,15 +442,59 @@ fn normalize_comment(cmt: &str) -> String {
     cmt.trim().to_string()
 }
 
+fn clean_col_name(s: &str) -> String {
+    s.chars().filter(|c| c.is_alphanumeric()).map(|c| c.to_ascii_lowercase()).collect()
+}
+
+fn parse_csv_line_rust(line: &str) -> Vec<String> {
+    let commas = line.chars().filter(|&c| c == ',').count();
+    let semis = line.chars().filter(|&c| c == ';').count();
+    let tabs = line.chars().filter(|&c| c == '\t').count();
+    let delim = if tabs > commas && tabs > semis { '\t' } else if semis > commas && semis > tabs { ';' } else { ',' };
+
+    let mut fields = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let ch = chars[i];
+        if ch == '"' {
+            if in_quotes && i + 1 < chars.len() && chars[i + 1] == '"' {
+                current.push('"');
+                i += 1;
+            } else {
+                in_quotes = !in_quotes;
+            }
+        } else if ch == delim && !in_quotes {
+            fields.push(current.trim().trim_matches('"').to_string());
+            current.clear();
+        } else {
+            current.push(ch);
+        }
+        i += 1;
+    }
+    fields.push(current.trim().trim_matches('"').to_string());
+    fields
+}
+
 fn parse_altium_data(filepath: &str) -> bool {
     let mut file = match File::open(filepath) {
         Ok(f) => f,
         Err(_) => return false,
     };
-    let mut content = String::new();
-    if file.read_to_string(&mut content).is_err() {
+    let mut raw_bytes = Vec::new();
+    if file.read_to_end(&mut raw_bytes).is_err() {
         return false;
     }
+
+    let raw_slice = if raw_bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        &raw_bytes[3..]
+    } else {
+        &raw_bytes[..]
+    };
+
+    let content = String::from_utf8_lossy(raw_slice);
 
     let mut is_mil = false;
     let mut header_found = false;
@@ -463,42 +507,68 @@ fn parse_altium_data(filepath: &str) -> bool {
         let l_trim = line.trim();
         if l_trim.is_empty() { continue; }
 
-        if l_trim.to_lowercase().contains("units used: mil") {
+        let l_lower = l_trim.to_lowercase();
+        if l_lower.contains("units used: mil") || l_lower.contains("unit: mil") || l_lower.contains("(mil)") {
             is_mil = true;
         }
 
         if !header_found {
-            if l_trim.contains("Designator") && l_trim.contains("Comment") {
-                header_found = true;
-                let cols: Vec<&str> = l_trim.split(',').map(|s| s.trim().trim_matches('"')).collect();
-                for (idx, c) in cols.iter().enumerate() {
-                    let cl = c.to_lowercase();
-                    if cl == "designator" { col_map.insert("des", idx); }
-                    else if cl == "comment" { col_map.insert("cmt", idx); }
-                    else if cl == "layer" { col_map.insert("layer", idx); }
-                    else if cl == "footprint" { col_map.insert("fp", idx); }
-                    else if cl.starts_with("center-x") || cl.starts_with("mid x") {
-                        col_map.insert("x", idx);
-                        if cl.contains("mil") { is_mil = true; }
-                    } else if cl.starts_with("center-y") || cl.starts_with("mid y") {
-                        col_map.insert("y", idx);
-                    } else if cl.starts_with("rotation") {
-                        col_map.insert("rot", idx);
+            let cols = parse_csv_line_rust(l_trim);
+            let mut temp_map = std::collections::HashMap::new();
+            for (idx, c) in cols.iter().enumerate() {
+                let k = clean_col_name(c);
+                let raw_lower = c.to_lowercase();
+                if ["designator", "refdes", "ref", "reference", "part", "comp", "name", "tag", "item"].contains(&k.as_str()) {
+                    temp_map.entry("des").or_insert(idx);
+                } else if ["comment", "val", "value", "description", "device", "component"].contains(&k.as_str()) {
+                    temp_map.entry("cmt").or_insert(idx);
+                } else if ["footprint", "package", "pattern", "pkg", "fp"].contains(&k.as_str()) {
+                    temp_map.entry("fp").or_insert(idx);
+                } else if ["midx", "centerx", "posx", "x", "midxmm", "centerxmm", "posxmm", "padx", "xmid"].contains(&k.as_str()) {
+                    if !temp_map.contains_key("x") {
+                        temp_map.insert("x", idx);
+                        if raw_lower.contains("mil") || raw_lower.contains("inch") { is_mil = true; }
                     }
+                } else if ["midy", "centery", "posy", "y", "midymm", "centerymm", "posymm", "pady", "ymid"].contains(&k.as_str()) {
+                    temp_map.entry("y").or_insert(idx);
+                } else if ["rotation", "rot", "angle", "orientation", "rotate"].contains(&k.as_str()) {
+                    temp_map.entry("rot").or_insert(idx);
+                } else if ["layer", "side", "face", "tb", "topbottom"].contains(&k.as_str()) {
+                    temp_map.entry("layer").or_insert(idx);
+                } else if ["head", "nozzle", "headno"].contains(&k.as_str()) {
+                    temp_map.entry("head").or_insert(idx);
+                } else if ["feederno", "feeder", "slot", "stack"].contains(&k.as_str()) {
+                    temp_map.entry("feeder").or_insert(idx);
+                } else if ["mountspeed", "speed", "velocity"].contains(&k.as_str()) {
+                    temp_map.entry("speed").or_insert(idx);
+                } else if ["pickheight", "pick", "pickheightmm"].contains(&k.as_str()) {
+                    temp_map.entry("pick").or_insert(idx);
+                } else if ["placeheight", "place", "placeheightmm"].contains(&k.as_str()) {
+                    temp_map.entry("place").or_insert(idx);
+                } else if ["mode", "visionmode"].contains(&k.as_str()) {
+                    temp_map.entry("mode").or_insert(idx);
+                } else if ["skip", "enable", "active"].contains(&k.as_str()) {
+                    temp_map.entry("skip").or_insert(idx);
                 }
+            }
+
+            if temp_map.contains_key("des") && (temp_map.contains_key("x") || temp_map.contains_key("cmt") || temp_map.contains_key("fp")) {
+                header_found = true;
+                col_map = temp_map;
             }
             continue;
         }
 
-        let parts: Vec<&str> = l_trim.split(',').map(|s| s.trim().trim_matches('"')).collect();
+        let parts = parse_csv_line_rust(l_trim);
         if let Some(&des_idx) = col_map.get("des") {
             if des_idx >= parts.len() { continue; }
-            let des = parts[des_idx];
-            if des.is_empty() || des.starts_with('*') { continue; }
+            let des = &parts[des_idx];
+            if des.is_empty() || des.starts_with('*') || des.starts_with('#') || des.starts_with(';') { continue; }
+            if ["designator", "refdes"].contains(&clean_col_name(des).as_str()) { continue; }
 
-            let cmt_raw = col_map.get("cmt").and_then(|&i| parts.get(i)).unwrap_or(&"");
-            let fp_raw = col_map.get("fp").and_then(|&i| parts.get(i)).filter(|s| !s.is_empty()).unwrap_or(&"0603D");
-            let layer = col_map.get("layer").and_then(|&i| parts.get(i)).unwrap_or(&"TopLayer").to_string();
+            let cmt_raw = col_map.get("cmt").and_then(|&i| parts.get(i)).map(|s| s.as_str()).unwrap_or("");
+            let fp_raw = col_map.get("fp").and_then(|&i| parts.get(i)).filter(|s| !s.is_empty()).map(|s| s.as_str()).unwrap_or("0603D");
+            let layer_raw = col_map.get("layer").and_then(|&i| parts.get(i)).map(|s| s.as_str()).unwrap_or("TopLayer");
 
             let cmt = normalize_comment(cmt_raw);
             let fp = normalize_footprint(fp_raw);
@@ -510,30 +580,47 @@ fn parse_altium_data(filepath: &str) -> bool {
             let mid_x = if is_mil { rx * 0.0254 } else { rx };
             let mid_y = if is_mil { ry * 0.0254 } else { ry };
 
+            let head: i32 = col_map.get("head").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(0);
+            let feeder_no: i32 = col_map.get("feeder").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(1);
+            let mount_speed: i32 = col_map.get("speed").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(100);
+            let pick_height: f64 = col_map.get("pick").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+            let place_height: f64 = col_map.get("place").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+            let mode: i32 = col_map.get("mode").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(1);
+            let skip: i32 = col_map.get("skip").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(0);
+
+            let layer_clean = if layer_raw.to_lowercase().contains("bot") || layer_raw.to_lowercase().contains("back") || layer_raw.to_lowercase() == "b" {
+                "BottomLayer".to_string()
+            } else {
+                "TopLayer".to_string()
+            };
+
             let comp = Component {
-                designator: des.to_string(),
+                designator: des.clone(),
                 comment: cmt,
                 footprint: fp,
                 mid_x,
                 mid_y,
                 rotation: rot,
-                head: 0,
-                feeder_no: 1,
-                mount_speed: 100,
-                pick_height: 0.0,
-                place_height: 0.0,
-                mode: 1,
-                skip: 0,
-                layer: layer.clone(),
+                head,
+                feeder_no,
+                mount_speed,
+                pick_height,
+                place_height,
+                mode,
+                skip,
+                layer: layer_clean.clone(),
             };
 
-            let ll = layer.to_lowercase();
-            if ll.contains("bot") || ll == "b" {
+            if layer_clean == "BottomLayer" {
                 bot_raw.push(comp);
             } else {
                 top_raw.push(comp);
             }
         }
+    }
+
+    if !header_found || (top_raw.is_empty() && bot_raw.is_empty()) {
+        return false;
     }
 
     let sort_comps = |list: &mut Vec<Component>| {

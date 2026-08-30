@@ -70,6 +70,16 @@ void component_list_free(ComponentList* list) {
     list->capacity = 0;
 }
 
+static void clean_col_name(const char* in, char* out, size_t out_size) {
+    size_t o = 0;
+    for (size_t i = 0; in[i] != '\0' && o < out_size - 1; ++i) {
+        if (isalnum((unsigned char)in[i])) {
+            out[o++] = (char)tolower((unsigned char)in[i]);
+        }
+    }
+    out[o] = '\0';
+}
+
 void component_list_add(ComponentList* list, const Component* comp) {
     if (list->count >= list->capacity) {
         size_t new_cap = list->capacity == 0 ? 32 : list->capacity * 2;
@@ -101,6 +111,20 @@ static void str_to_lower(char* str) {
 }
 
 static size_t parse_csv_line(const char* line, char fields[][MAX_STR], size_t max_fields) {
+    char delimiter = ',';
+    int commas = 0, semis = 0, tabs = 0;
+    bool in_q = false;
+    for (size_t i = 0; line[i] != '\0'; ++i) {
+        if (line[i] == '"') in_q = !in_q;
+        else if (!in_q) {
+            if (line[i] == ',') commas++;
+            else if (line[i] == ';') semis++;
+            else if (line[i] == '\t') tabs++;
+        }
+    }
+    if (tabs > commas && tabs > semis) delimiter = '\t';
+    else if (semis > commas && semis > tabs) delimiter = ';';
+
     size_t field_idx = 0;
     size_t char_idx = 0;
     bool in_quotes = false;
@@ -114,7 +138,7 @@ static size_t parse_csv_line(const char* line, char fields[][MAX_STR], size_t ma
             } else {
                 in_quotes = !in_quotes;
             }
-        } else if (ch == ',' && !in_quotes) {
+        } else if (ch == delimiter && !in_quotes) {
             fields[field_idx][char_idx] = '\0';
             trim_str(fields[field_idx]);
             field_idx++;
@@ -142,9 +166,9 @@ static void extract_prefix_and_number(const char* s, char* prefix, int* number) 
     for (int i = 0; s[i] != '\0'; ++i) {
         if (isdigit((unsigned char)s[i])) {
             in_num = true;
-            if (n_idx < 30) num_str[n_idx++] = s[i];
+            if (n_idx < 31) num_str[n_idx++] = s[i];
         } else if (!in_num) {
-            if (p_idx < MAX_STR - 1) prefix[p_idx++] = s[i];
+            if (p_idx < 31) prefix[p_idx++] = s[i];
         }
     }
     prefix[p_idx] = '\0';
@@ -259,6 +283,12 @@ bool read_altium_file(const char* filepath, ComponentList* out_list, char* error
     buffer[read_bytes] = '\0';
     fclose(f);
 
+    // Skip UTF-8 BOM
+    char* content_start = buffer;
+    if (read_bytes >= 3 && (unsigned char)buffer[0] == 0xEF && (unsigned char)buffer[1] == 0xBB && (unsigned char)buffer[2] == 0xBF) {
+        content_start = buffer + 3;
+    }
+
     component_list_free(out_list);
     component_list_init(out_list);
 
@@ -266,44 +296,74 @@ bool read_altium_file(const char* filepath, ComponentList* out_list, char* error
     bool is_mil = false;
     int col_des = -1, col_cmt = -1, col_layer = -1, col_fp = -1;
     int col_x = -1, col_y = -1, col_rot = -1;
+    int col_head = -1, col_feeder = -1, col_speed = -1, col_pick = -1, col_place = -1, col_mode = -1, col_skip = -1;
 
-    char* line = strtok(buffer, "\r\n");
+    char* line = strtok(content_start, "\r\n");
     char fields[32][MAX_STR];
 
     while (line != NULL) {
         char line_lower[1024];
-        strncpy(line_lower, line, sizeof(line_lower));
+        strncpy(line_lower, line, sizeof(line_lower) - 1);
         line_lower[sizeof(line_lower) - 1] = '\0';
         str_to_lower(line_lower);
 
-        if (strstr(line_lower, "units used: mil") != NULL) {
+        if (strstr(line_lower, "units used: mil") || strstr(line_lower, "unit: mil") || strstr(line_lower, "(mil)")) {
             is_mil = true;
         }
 
         if (!header_found) {
-            if (strstr(line, "Designator") != NULL && strstr(line, "Comment") != NULL) {
-                header_found = true;
-                size_t num_cols = parse_csv_line(line, fields, 32);
-                for (size_t i = 0; i < num_cols; ++i) {
-                    char col_name[MAX_STR];
-                    strncpy(col_name, fields[i], sizeof(col_name));
-                    str_to_lower(col_name);
+            size_t num_cols = parse_csv_line(line, fields, 32);
+            int temp_des = -1, temp_cmt = -1, temp_fp = -1, temp_x = -1, temp_y = -1, temp_rot = -1, temp_layer = -1;
+            int temp_head = -1, temp_feeder = -1, temp_speed = -1, temp_pick = -1, temp_place = -1, temp_mode = -1, temp_skip = -1;
 
-                    if (strcmp(col_name, "designator") == 0) col_des = (int)i;
-                    else if (strcmp(col_name, "comment") == 0) col_cmt = (int)i;
-                    else if (strcmp(col_name, "layer") == 0) col_layer = (int)i;
-                    else if (strcmp(col_name, "footprint") == 0) col_fp = (int)i;
-                    else if (strncmp(col_name, "center-x", 8) == 0 || strncmp(col_name, "mid x", 5) == 0) {
-                        col_x = (int)i;
-                        if (strstr(col_name, "mil") != NULL) is_mil = true;
+            for (size_t i = 0; i < num_cols; ++i) {
+                char k[MAX_STR];
+                clean_col_name(fields[i], k, sizeof(k));
+                char raw_l[MAX_STR];
+                strncpy(raw_l, fields[i], sizeof(raw_l) - 1);
+                raw_l[sizeof(raw_l) - 1] = '\0';
+                str_to_lower(raw_l);
+
+                if (strcmp(k, "designator") == 0 || strcmp(k, "refdes") == 0 || strcmp(k, "ref") == 0 || strcmp(k, "reference") == 0 || strcmp(k, "part") == 0 || strcmp(k, "comp") == 0 || strcmp(k, "name") == 0 || strcmp(k, "tag") == 0 || strcmp(k, "item") == 0) {
+                    if (temp_des == -1) temp_des = (int)i;
+                } else if (strcmp(k, "comment") == 0 || strcmp(k, "val") == 0 || strcmp(k, "value") == 0 || strcmp(k, "description") == 0 || strcmp(k, "device") == 0 || strcmp(k, "component") == 0) {
+                    if (temp_cmt == -1) temp_cmt = (int)i;
+                } else if (strcmp(k, "footprint") == 0 || strcmp(k, "package") == 0 || strcmp(k, "pattern") == 0 || strcmp(k, "pkg") == 0 || strcmp(k, "fp") == 0) {
+                    if (temp_fp == -1) temp_fp = (int)i;
+                } else if (strcmp(k, "midx") == 0 || strcmp(k, "centerx") == 0 || strcmp(k, "posx") == 0 || strcmp(k, "x") == 0 || strcmp(k, "midxmm") == 0 || strcmp(k, "centerxmm") == 0 || strcmp(k, "posxmm") == 0 || strcmp(k, "padx") == 0 || strcmp(k, "xmid") == 0) {
+                    if (temp_x == -1) {
+                        temp_x = (int)i;
+                        if (strstr(raw_l, "mil") || strstr(raw_l, "inch")) is_mil = true;
                     }
-                    else if (strncmp(col_name, "center-y", 8) == 0 || strncmp(col_name, "mid y", 5) == 0) {
-                        col_y = (int)i;
-                    }
-                    else if (strncmp(col_name, "rotation", 8) == 0) {
-                        col_rot = (int)i;
-                    }
+                } else if (strcmp(k, "midy") == 0 || strcmp(k, "centery") == 0 || strcmp(k, "posy") == 0 || strcmp(k, "y") == 0 || strcmp(k, "midymm") == 0 || strcmp(k, "centerymm") == 0 || strcmp(k, "posymm") == 0 || strcmp(k, "pady") == 0 || strcmp(k, "ymid") == 0) {
+                    if (temp_y == -1) temp_y = (int)i;
+                } else if (strcmp(k, "rotation") == 0 || strcmp(k, "rot") == 0 || strcmp(k, "angle") == 0 || strcmp(k, "orientation") == 0 || strcmp(k, "rotate") == 0) {
+                    if (temp_rot == -1) temp_rot = (int)i;
+                } else if (strcmp(k, "layer") == 0 || strcmp(k, "side") == 0 || strcmp(k, "face") == 0 || strcmp(k, "tb") == 0 || strcmp(k, "topbottom") == 0) {
+                    if (temp_layer == -1) temp_layer = (int)i;
+                } else if (strcmp(k, "head") == 0 || strcmp(k, "nozzle") == 0 || strcmp(k, "headno") == 0) {
+                    if (temp_head == -1) temp_head = (int)i;
+                } else if (strcmp(k, "feederno") == 0 || strcmp(k, "feeder") == 0 || strcmp(k, "slot") == 0 || strcmp(k, "stack") == 0) {
+                    if (temp_feeder == -1) temp_feeder = (int)i;
+                } else if (strcmp(k, "mountspeed") == 0 || strcmp(k, "speed") == 0 || strcmp(k, "velocity") == 0) {
+                    if (temp_speed == -1) temp_speed = (int)i;
+                } else if (strcmp(k, "pickheight") == 0 || strcmp(k, "pick") == 0 || strcmp(k, "pickheightmm") == 0) {
+                    if (temp_pick == -1) temp_pick = (int)i;
+                } else if (strcmp(k, "placeheight") == 0 || strcmp(k, "place") == 0 || strcmp(k, "placeheightmm") == 0) {
+                    if (temp_place == -1) temp_place = (int)i;
+                } else if (strcmp(k, "mode") == 0 || strcmp(k, "visionmode") == 0) {
+                    if (temp_mode == -1) temp_mode = (int)i;
+                } else if (strcmp(k, "skip") == 0 || strcmp(k, "enable") == 0 || strcmp(k, "active") == 0) {
+                    if (temp_skip == -1) temp_skip = (int)i;
                 }
+            }
+
+            if (temp_des != -1 && (temp_x != -1 || temp_cmt != -1 || temp_fp != -1)) {
+                header_found = true;
+                col_des = temp_des; col_cmt = temp_cmt; col_fp = temp_fp;
+                col_x = temp_x; col_y = temp_y; col_rot = temp_rot; col_layer = temp_layer;
+                col_head = temp_head; col_feeder = temp_feeder; col_speed = temp_speed;
+                col_pick = temp_pick; col_place = temp_place; col_mode = temp_mode; col_skip = temp_skip;
             }
             line = strtok(NULL, "\r\n");
             continue;
@@ -312,7 +372,10 @@ bool read_altium_file(const char* filepath, ComponentList* out_list, char* error
         size_t num_fields = parse_csv_line(line, fields, 32);
         if (col_des >= 0 && col_des < (int)num_fields) {
             const char* des = fields[col_des];
-            if (des[0] != '\0' && des[0] != '*') {
+            char des_clean[MAX_STR];
+            clean_col_name(des, des_clean, sizeof(des_clean));
+
+            if (des[0] != '\0' && des[0] != '*' && des[0] != '#' && des[0] != ';' && strcmp(des_clean, "designator") != 0 && strcmp(des_clean, "refdes") != 0) {
                 Component comp;
                 memset(&comp, 0, sizeof(Component));
                 strncpy(comp.designator, des, sizeof(comp.designator) - 1);
@@ -327,22 +390,28 @@ bool read_altium_file(const char* filepath, ComponentList* out_list, char* error
                     strcpy(comp.footprint, "0603D");
                 }
 
-                if (col_layer >= 0 && col_layer < (int)num_fields)
-                    strncpy(comp.layer, fields[col_layer], sizeof(comp.layer) - 1);
+                char raw_layer[MAX_STR] = {0};
+                if (col_layer >= 0 && col_layer < (int)num_fields) {
+                    strncpy(raw_layer, fields[col_layer], sizeof(raw_layer) - 1);
+                    str_to_lower(raw_layer);
+                }
+                if (strstr(raw_layer, "bot") || strstr(raw_layer, "back") || strcmp(raw_layer, "b") == 0) {
+                    strcpy(comp.layer, "BottomLayer");
+                } else {
+                    strcpy(comp.layer, "TopLayer");
+                }
 
                 double rx = (col_x >= 0 && col_x < (int)num_fields) ? atof(fields[col_x]) : 0.0;
                 double ry = (col_y >= 0 && col_y < (int)num_fields) ? atof(fields[col_y]) : 0.0;
                 comp.rotation = (col_rot >= 0 && col_rot < (int)num_fields) ? atof(fields[col_rot]) : 0.0;
 
-                comp.mid_x = is_mil ? rx * 0.0254 : rx;
-                comp.mid_y = is_mil ? ry * 0.0254 : ry;
-                comp.head = 0;
-                comp.feeder_no = 1;
-                comp.mount_speed = 100;
-                comp.pick_height = 0.0;
-                comp.place_height = 0.0;
-                comp.mode = 1;
-                comp.skip = 0;
+                comp.head = (col_head >= 0 && col_head < (int)num_fields && fields[col_head][0] != '\0') ? atoi(fields[col_head]) : 0;
+                comp.feeder_no = (col_feeder >= 0 && col_feeder < (int)num_fields && fields[col_feeder][0] != '\0') ? atoi(fields[col_feeder]) : 1;
+                comp.mount_speed = (col_speed >= 0 && col_speed < (int)num_fields && fields[col_speed][0] != '\0') ? atoi(fields[col_speed]) : 100;
+                comp.pick_height = (col_pick >= 0 && col_pick < (int)num_fields && fields[col_pick][0] != '\0') ? atof(fields[col_pick]) : 0.0;
+                comp.place_height = (col_place >= 0 && col_place < (int)num_fields && fields[col_place][0] != '\0') ? atof(fields[col_place]) : 0.0;
+                comp.mode = (col_mode >= 0 && col_mode < (int)num_fields && fields[col_mode][0] != '\0') ? atoi(fields[col_mode]) : 1;
+                comp.skip = (col_skip >= 0 && col_skip < (int)num_fields && fields[col_skip][0] != '\0') ? atoi(fields[col_skip]) : 0;
 
                 component_list_add(out_list, &comp);
             }
@@ -353,8 +422,8 @@ bool read_altium_file(const char* filepath, ComponentList* out_list, char* error
 
     free(buffer);
 
-    if (!header_found) {
-        snprintf(error_msg, error_msg_size, "Không tìm thấy dòng Header (Designator, Comment) trong file Altium!");
+    if (!header_found || out_list->count == 0) {
+        snprintf(error_msg, error_msg_size, "Không thể đọc dữ liệu từ file! Vui lòng kiểm tra định dạng CSV/TXT.");
         return false;
     }
 

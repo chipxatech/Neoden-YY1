@@ -127,7 +127,31 @@ std::pair<std::string, int> NeoDenConverter::extractPrefixAndNumber(const std::s
     return {prefix, num};
 }
 
+static std::string cleanColName(const std::string& s) {
+    std::string out;
+    for (char c : s) {
+        if (std::isalnum(static_cast<unsigned char>(c))) {
+            out += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+    }
+    return out;
+}
+
 std::vector<std::string> NeoDenConverter::parseCsvLine(const std::string& line) {
+    char delimiter = ',';
+    int commas = 0, semis = 0, tabs = 0;
+    bool in_q = false;
+    for (char ch : line) {
+        if (ch == '"') in_q = !in_q;
+        else if (!in_q) {
+            if (ch == ',') commas++;
+            else if (ch == ';') semis++;
+            else if (ch == '\t') tabs++;
+        }
+    }
+    if (tabs > commas && tabs > semis) delimiter = '\t';
+    else if (semis > commas && semis > tabs) delimiter = ';';
+
     std::vector<std::string> fields;
     std::string current = "";
     bool in_quotes = false;
@@ -141,7 +165,7 @@ std::vector<std::string> NeoDenConverter::parseCsvLine(const std::string& line) 
             } else {
                 in_quotes = !in_quotes;
             }
-        } else if (ch == ',' && !in_quotes) {
+        } else if (ch == delimiter && !in_quotes) {
             fields.push_back(trim(current));
             current.clear();
         } else {
@@ -163,6 +187,11 @@ bool NeoDenConverter::readAltiumFile(const std::string& filepath, std::string& e
     buffer << file.rdbuf();
     std::string content = buffer.str();
 
+    // Bỏ qua UTF-8 BOM nếu có
+    if (content.size() >= 3 && (unsigned char)content[0] == 0xEF && (unsigned char)content[1] == 0xBB && (unsigned char)content[2] == 0xBF) {
+        content = content.substr(3);
+    }
+
     components_.clear();
     std::istringstream stream(content);
     std::string line;
@@ -171,34 +200,67 @@ bool NeoDenConverter::readAltiumFile(const std::string& filepath, std::string& e
 
     int col_des = -1, col_cmt = -1, col_layer = -1, col_fp = -1;
     int col_x = -1, col_y = -1, col_rot = -1;
+    int col_head = -1, col_feeder = -1, col_speed = -1, col_pick = -1, col_place = -1, col_mode = -1, col_skip = -1;
 
     while (std::getline(stream, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.empty()) continue;
 
-        if (toLower(line).find("units used: mil") != std::string::npos) {
+        std::string line_l = toLower(line);
+        if (line_l.find("units used: mil") != std::string::npos || line_l.find("unit: mil") != std::string::npos || line_l.find("(mil)") != std::string::npos) {
             is_mil = true;
         }
 
         if (!header_found) {
-            if (line.find("Designator") != std::string::npos && line.find("Comment") != std::string::npos) {
-                header_found = true;
-                auto cols = parseCsvLine(line);
-                for (size_t i = 0; i < cols.size(); ++i) {
-                    std::string c = toLower(cols[i]);
-                    if (c == "designator") col_des = static_cast<int>(i);
-                    else if (c == "comment") col_cmt = static_cast<int>(i);
-                    else if (c == "layer") col_layer = static_cast<int>(i);
-                    else if (c == "footprint") col_fp = static_cast<int>(i);
-                    else if (c.rfind("center-x", 0) == 0 || c.rfind("mid x", 0) == 0) {
-                        col_x = static_cast<int>(i);
-                        if (c.find("mil") != std::string::npos) is_mil = true;
-                    } else if (c.rfind("center-y", 0) == 0 || c.rfind("mid y", 0) == 0) {
-                        col_y = static_cast<int>(i);
-                    } else if (c.rfind("rotation", 0) == 0) {
-                        col_rot = static_cast<int>(i);
+            auto cols = parseCsvLine(line);
+            int temp_des = -1, temp_cmt = -1, temp_fp = -1, temp_x = -1, temp_y = -1, temp_rot = -1, temp_layer = -1;
+            int temp_head = -1, temp_feeder = -1, temp_speed = -1, temp_pick = -1, temp_place = -1, temp_mode = -1, temp_skip = -1;
+
+            for (size_t i = 0; i < cols.size(); ++i) {
+                std::string k = cleanColName(cols[i]);
+                std::string raw_lower = toLower(cols[i]);
+
+                if (k == "designator" || k == "refdes" || k == "ref" || k == "reference" || k == "part" || k == "comp" || k == "name" || k == "tag" || k == "item") {
+                    if (temp_des == -1) temp_des = static_cast<int>(i);
+                } else if (k == "comment" || k == "val" || k == "value" || k == "description" || k == "device" || k == "component") {
+                    if (temp_cmt == -1) temp_cmt = static_cast<int>(i);
+                } else if (k == "footprint" || k == "package" || k == "pattern" || k == "pkg" || k == "fp") {
+                    if (temp_fp == -1) temp_fp = static_cast<int>(i);
+                } else if (k == "midx" || k == "centerx" || k == "posx" || k == "x" || k == "midxmm" || k == "centerxmm" || k == "posxmm" || k == "padx" || k == "xmid") {
+                    if (temp_x == -1) {
+                        temp_x = static_cast<int>(i);
+                        if (raw_lower.find("mil") != std::string::npos || raw_lower.find("inch") != std::string::npos) is_mil = true;
                     }
+                } else if (k == "midy" || k == "centery" || k == "posy" || k == "y" || k == "midymm" || k == "centerymm" || k == "posymm" || k == "pady" || k == "ymid") {
+                    if (temp_y == -1) temp_y = static_cast<int>(i);
+                } else if (k == "rotation" || k == "rot" || k == "angle" || k == "orientation" || k == "rotate") {
+                    if (temp_rot == -1) temp_rot = static_cast<int>(i);
+                } else if (k == "layer" || k == "side" || k == "face" || k == "tb" || k == "topbottom") {
+                    if (temp_layer == -1) temp_layer = static_cast<int>(i);
+                } else if (k == "head" || k == "nozzle" || k == "headno") {
+                    if (temp_head == -1) temp_head = static_cast<int>(i);
+                } else if (k == "feederno" || k == "feeder" || k == "slot" || k == "stack") {
+                    if (temp_feeder == -1) temp_feeder = static_cast<int>(i);
+                } else if (k == "mountspeed" || k == "speed" || k == "velocity") {
+                    if (temp_speed == -1) temp_speed = static_cast<int>(i);
+                } else if (k == "pickheight" || k == "pick" || k == "pickheightmm") {
+                    if (temp_pick == -1) temp_pick = static_cast<int>(i);
+                } else if (k == "placeheight" || k == "place" || k == "placeheightmm") {
+                    if (temp_place == -1) temp_place = static_cast<int>(i);
+                } else if (k == "mode" || k == "visionmode") {
+                    if (temp_mode == -1) temp_mode = static_cast<int>(i);
+                } else if (k == "skip" || k == "enable" || k == "active") {
+                    if (temp_skip == -1) temp_skip = static_cast<int>(i);
                 }
+            }
+
+            // Tiêu chuẩn nhận diện dòng Header linh hoạt
+            if (temp_des != -1 && (temp_x != -1 || temp_cmt != -1 || temp_fp != -1)) {
+                header_found = true;
+                col_des = temp_des; col_cmt = temp_cmt; col_fp = temp_fp;
+                col_x = temp_x; col_y = temp_y; col_rot = temp_rot; col_layer = temp_layer;
+                col_head = temp_head; col_feeder = temp_feeder; col_speed = temp_speed;
+                col_pick = temp_pick; col_place = temp_place; col_mode = temp_mode; col_skip = temp_skip;
             }
             continue;
         }
@@ -210,30 +272,52 @@ bool NeoDenConverter::readAltiumFile(const std::string& filepath, std::string& e
         };
 
         std::string des = get_val(col_des);
-        if (des.empty() || des[0] == '*') continue;
+        if (des.empty() || des[0] == '*' || des[0] == '#' || des[0] == ';') continue;
+        if (cleanColName(des) == "designator" || cleanColName(des) == "refdes") continue;
 
         Component comp;
         comp.designator = des;
         comp.comment = get_val(col_cmt);
         comp.footprint = get_val(col_fp).empty() ? "0603D" : get_val(col_fp);
-        comp.layer = get_val(col_layer);
+
+        std::string raw_l = toLower(get_val(col_layer));
+        if (raw_l.find("bot") != std::string::npos || raw_l.find("back") != std::string::npos || raw_l == "b") {
+            comp.layer = "BottomLayer";
+        } else {
+            comp.layer = "TopLayer";
+        }
 
         try {
-            double rx = get_val(col_x).empty() ? 0.0 : std::stod(get_val(col_x));
-            double ry = get_val(col_y).empty() ? 0.0 : std::stod(get_val(col_y));
-            comp.rotation = get_val(col_rot).empty() ? 0.0 : std::stod(get_val(col_rot));
+            std::string sx = get_val(col_x);
+            std::string sy = get_val(col_y);
+            std::string srot = get_val(col_rot);
+
+            double rx = sx.empty() ? 0.0 : std::stod(sx);
+            double ry = sy.empty() ? 0.0 : std::stod(sy);
+            comp.rotation = srot.empty() ? 0.0 : std::stod(srot);
 
             comp.mid_x = is_mil ? rx * 0.0254 : rx;
             comp.mid_y = is_mil ? ry * 0.0254 : ry;
         } catch (...) {
-            continue;
+            comp.mid_x = 0.0;
+            comp.mid_y = 0.0;
+            comp.rotation = 0.0;
         }
+
+        // Tự động giữ nguyên các thông số nếu file đã có sẵn định dạng NeoDen YY1
+        if (col_head != -1 && !get_val(col_head).empty()) comp.head = std::atoi(get_val(col_head).c_str());
+        if (col_feeder != -1 && !get_val(col_feeder).empty()) comp.feeder_no = std::atoi(get_val(col_feeder).c_str());
+        if (col_speed != -1 && !get_val(col_speed).empty()) comp.mount_speed = std::atoi(get_val(col_speed).c_str());
+        if (col_pick != -1 && !get_val(col_pick).empty()) comp.pick_height = std::atof(get_val(col_pick).c_str());
+        if (col_place != -1 && !get_val(col_place).empty()) comp.place_height = std::atof(get_val(col_place).c_str());
+        if (col_mode != -1 && !get_val(col_mode).empty()) comp.mode = std::atoi(get_val(col_mode).c_str());
+        if (col_skip != -1 && !get_val(col_skip).empty()) comp.skip = std::atoi(get_val(col_skip).c_str());
 
         components_.push_back(comp);
     }
 
-    if (!header_found) {
-        errorMsg = "Không tìm thấy dòng Header (Designator, Comment) trong file Altium!";
+    if (!header_found || components_.empty()) {
+        errorMsg = "Không thể đọc dữ liệu từ file! Vui lòng kiểm tra định dạng CSV/TXT.";
         return false;
     }
 
