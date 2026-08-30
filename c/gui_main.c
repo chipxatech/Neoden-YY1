@@ -495,27 +495,27 @@ static void open_feeder_matrix_dialog_c(HWND parent) {
     HWND hGrp4 = CreateWindowExW(0, L"BUTTON", L" 📌 Góc Dưới Phải (Khay 30 → 39) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 330, 295, 300, 330, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hGrp4, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    // 1. Góc Trên Trái: 14..24 (1 cột duy nhất, 11 khay)
+    // 1. Góc Trên Trái: Khay 14..24 (#14 ở dưới cùng, #24 ở trên cùng)
     for (int i = 0; i < 11; ++i) {
-        int slot = 14 + i;
+        int slot = 24 - i;
         create_feeder_slot_control_c(hDlg, slot, 25, 32 + i * 22, g_feeder_matrix_c[slot].comment);
     }
 
-    // 2. Góc Trên Phải: 40..50 (1 cột duy nhất, 11 khay)
+    // 2. Góc Trên Phải: Khay 40..50 (#40 ở dưới cùng, #50 ở trên cùng)
     for (int i = 0; i < 11; ++i) {
-        int slot = 40 + i;
+        int slot = 50 - i;
         create_feeder_slot_control_c(hDlg, slot, 340, 32 + i * 22, g_feeder_matrix_c[slot].comment);
     }
 
-    // 3. Góc Dưới Trái: 1..13 (1 cột duy nhất, 13 khay)
+    // 3. Góc Dưới Trái: Khay 1..13 (#01 ở dưới cùng, #13 ở trên cùng)
     for (int i = 0; i < 13; ++i) {
-        int slot = 1 + i;
+        int slot = 13 - i;
         create_feeder_slot_control_c(hDlg, slot, 25, 318 + i * 23, g_feeder_matrix_c[slot].comment);
     }
 
-    // 4. Góc Dưới Phải: 30..39 (1 cột duy nhất, 10 khay)
+    // 4. Góc Dưới Phải: Khay 30..39 (#30 ở dưới cùng, #39 ở trên cùng)
     for (int i = 0; i < 10; ++i) {
-        int slot = 30 + i;
+        int slot = 39 - i;
         create_feeder_slot_control_c(hDlg, slot, 340, 318 + i * 23, g_feeder_matrix_c[slot].comment);
     }
 

@@ -154,11 +154,11 @@ class FeederMatrixDialog(tk.Toplevel):
         grid_frame.columnconfigure(0, weight=1)
         grid_frame.columnconfigure(1, weight=1)
         
-        # 4 Quadrants (Mỗi góc 1 cột duy nhất, không xếp 2 hàng/cột)
-        self.build_quadrant(grid_frame, 0, 0, "📌 Góc Trên Trái (14 → 24)", range(14, 25), "#818CF8")
-        self.build_quadrant(grid_frame, 0, 1, "📌 Góc Trên Phải (40 → 50)", range(40, 51), "#34D399")
-        self.build_quadrant(grid_frame, 1, 0, "📌 Góc Dưới Trái (1 → 13)", range(1, 14), "#38BDF8")
-        self.build_quadrant(grid_frame, 1, 1, "📌 Góc Dưới Phải (30 → 39)", range(30, 40), "#FBBF24")
+        # 4 Quadrants (Mỗi góc 1 cột duy nhất, số 1, 14, 30, 40 ở phía dưới)
+        self.build_quadrant(grid_frame, 0, 0, "📌 Góc Trên Trái (14 → 24)", range(24, 13, -1), "#818CF8")
+        self.build_quadrant(grid_frame, 0, 1, "📌 Góc Trên Phải (40 → 50)", range(50, 39, -1), "#34D399")
+        self.build_quadrant(grid_frame, 1, 0, "📌 Góc Dưới Trái (1 → 13)", range(13, 0, -1), "#38BDF8")
+        self.build_quadrant(grid_frame, 1, 1, "📌 Góc Dưới Phải (30 → 39)", range(39, 29, -1), "#FBBF24")
         
         # Footer buttons
         btn_bar = tk.Frame(self, bg="#1E293B", padx=15, pady=8)

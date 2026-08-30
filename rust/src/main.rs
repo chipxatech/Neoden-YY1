@@ -1136,30 +1136,30 @@ unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
 
     let opt = FEEDER_MATRIX_RUST.lock().unwrap();
 
-    // 1. Góc Trên Trái: 14..24 (1 cột duy nhất, 11 khay)
+    // 1. Góc Trên Trái: Khay 14..24 (#14 ở dưới cùng, #24 ở trên cùng)
     for i in 0..11 {
-        let slot = 14 + i;
+        let slot = 24 - i;
         let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
         create_feeder_slot_control_rust(h_dlg, slot, 25, 32 + i * 22, val);
     }
 
-    // 2. Góc Trên Phải: 40..50 (1 cột duy nhất, 11 khay)
+    // 2. Góc Trên Phải: Khay 40..50 (#40 ở dưới cùng, #50 ở trên cùng)
     for i in 0..11 {
-        let slot = 40 + i;
+        let slot = 50 - i;
         let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
         create_feeder_slot_control_rust(h_dlg, slot, 340, 32 + i * 22, val);
     }
 
-    // 3. Góc Dưới Trái: 1..13 (1 cột duy nhất, 13 khay)
+    // 3. Góc Dưới Trái: Khay 1..13 (#01 ở dưới cùng, #13 ở trên cùng)
     for i in 0..13 {
-        let slot = 1 + i;
+        let slot = 13 - i;
         let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
         create_feeder_slot_control_rust(h_dlg, slot, 25, 318 + i * 23, val);
     }
 
-    // 4. Góc Dưới Phải: 30..39 (1 cột duy nhất, 10 khay)
+    // 4. Góc Dưới Phải: Khay 30..39 (#30 ở dưới cùng, #39 ở trên cùng)
     for i in 0..10 {
-        let slot = 30 + i;
+        let slot = 39 - i;
         let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
         create_feeder_slot_control_rust(h_dlg, slot, 340, 318 + i * 23, val);
     }
