@@ -883,16 +883,6 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 
             MessageBoxW(hWnd, L"🎉 Đã lưu cấu hình và tự động gán lại toàn bộ số khay Feeder trên bảng mạch!", L"Thành Công", MB_ICONINFORMATION);
             DestroyWindow(hWnd);
-        } else if (wmId == 2002) { // Khôi phục mặc định
-            if (MessageBoxW(hWnd, L"Bạn có chắc muốn khôi phục lại nhãn 50 khay Feeder về mặc định ban đầu?", L"Xác Nhận", MB_ICONQUESTION | MB_YESNO) == IDYES) {
-                initDefaultFeederMatrix();
-                for (int slot = 1; slot <= 50; ++slot) {
-                    HWND hEd = GetDlgItem(hWnd, 5000 + slot);
-                    if (hEd) {
-                        SetWindowTextW(hEd, g_feeder_matrix[slot].comment.c_str());
-                    }
-                }
-            }
         } else if (wmId == IDCANCEL) {
             DestroyWindow(hWnd);
         }
@@ -925,7 +915,7 @@ void openFeederMatrixDialog(HWND parent) {
     HWND hLblProf = CreateWindowExW(0, L"STATIC", L"📂 Cấu Hình:", WS_CHILD | WS_VISIBLE | SS_RIGHT, 15, 14, 90, 20, hDlg, NULL, g_hInst, NULL);
     SendMessageW(hLblProf, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hCbProf = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL, 110, 11, 160, 200, hDlg, (HMENU)3001, g_hInst, NULL);
+    HWND hCbProf = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL, 110, 11, 160, 350, hDlg, (HMENU)3001, g_hInst, NULL);
     SendMessageW(hCbProf, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
     auto plist = listFeederProfilesCpp();
@@ -985,14 +975,11 @@ void openFeederMatrixDialog(HWND parent) {
         createFeederSlotControl(hDlg, slot, 345, 352 + i * 23, g_feeder_matrix[slot].comment);
     }
 
-    // Nút Lưu / Khôi phục / Đóng ở dưới
+    // Nút Lưu / Đóng ở dưới (Đã bỏ nút Mặc Định)
     HWND hBtnSave = CreateWindowExW(0, L"BUTTON", L"💾 LƯU & ÁP DỤNG NGAY", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 440, 675, 200, 36, hDlg, (HMENU)2001, g_hInst, NULL);
     SendMessageW(hBtnSave, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-    HWND hBtnReset = CreateWindowExW(0, L"BUTTON", L"🔄 Mặc Định", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 310, 675, 120, 36, hDlg, (HMENU)2002, g_hInst, NULL);
-    SendMessageW(hBtnReset, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
-
-    HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"Đóng", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 215, 675, 85, 36, hDlg, (HMENU)IDCANCEL, g_hInst, NULL);
+    HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"✖ Đóng", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 25, 675, 90, 36, hDlg, (HMENU)IDCANCEL, g_hInst, NULL);
     SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 }
 

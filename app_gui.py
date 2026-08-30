@@ -157,9 +157,9 @@ class FeederMatrixDialog(tk.Toplevel):
         prof_bar = tk.Frame(self, bg="#1E293B", padx=10, pady=6, bd=1, relief="ridge")
         prof_bar.pack(fill=tk.X, padx=10, pady=(2, 6))
         
-        tk.Label(prof_bar, text="📂 Cấu Hình (Profile):", font=("Segoe UI", 9, "bold"), fg="#F8FAFC", bg="#1E293B").pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(prof_bar, text="📂 Cấu Hình (Profile):", font=("Segoe UI", 9, "bold"), fg="#38BDF8", bg="#1E293B").pack(side=tk.LEFT, padx=(0, 6))
         
-        self.cb_profile = ttk.Combobox(prof_bar, textvariable=self.profile_var, state="readonly", width=18, font=("Segoe UI", 9))
+        self.cb_profile = ttk.Combobox(prof_bar, textvariable=self.profile_var, state="readonly", width=22, font=("Segoe UI", 9, "bold"))
         self.cb_profile.pack(side=tk.LEFT, padx=(0, 8))
         self.cb_profile.bind("<<ComboboxSelected>>", self.on_profile_selected)
         
@@ -184,9 +184,8 @@ class FeederMatrixDialog(tk.Toplevel):
         btn_bar = tk.Frame(self, bg="#1E293B", padx=15, pady=8)
         btn_bar.pack(fill=tk.X)
         
-        tk.Button(btn_bar, text="💾 LƯU & ÁP DỤNG NGAY", font=("Segoe UI", 9, "bold"), bg="#10B981", fg="white", padx=16, pady=5, bd=0, command=self.save_and_apply).pack(side=tk.RIGHT, padx=5)
-        tk.Button(btn_bar, text="🔄 Mặc Định", font=("Segoe UI", 9), bg="#475569", fg="white", padx=10, pady=5, bd=0, command=self.reset_default).pack(side=tk.RIGHT, padx=5)
-        tk.Button(btn_bar, text="✖ Đóng", font=("Segoe UI", 9), bg="#334155", fg="white", padx=10, pady=5, bd=0, command=self.destroy).pack(side=tk.LEFT)
+        tk.Button(btn_bar, text="💾 LƯU & ÁP DỤNG NGAY", font=("Segoe UI", 9, "bold"), bg="#10B981", fg="white", padx=18, pady=6, bd=0, command=self.save_and_apply).pack(side=tk.RIGHT, padx=5)
+        tk.Button(btn_bar, text="✖ Đóng", font=("Segoe UI", 9), bg="#334155", fg="white", padx=14, pady=6, bd=0, command=self.destroy).pack(side=tk.LEFT)
         
     def build_quadrant(self, parent, row, col, title, feeder_range, border_color):
         frame = tk.LabelFrame(parent, text=f"  {title}  ", font=("Segoe UI", 9, "bold"), fg=border_color, bg="#1E293B", bd=2, relief="groove", padx=6, pady=4)

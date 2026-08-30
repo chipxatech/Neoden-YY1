@@ -1359,20 +1359,6 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                 refresh_list_view();
                 MessageBoxW(hwnd, to_wstr("🎉 Đã lưu cấu hình và tự động gán lại toàn bộ số khay Feeder trên bảng mạch!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
                 DestroyWindow(hwnd);
-            } else if id == 2002 { // Khôi phục mặc định
-                if MessageBoxW(hwnd, to_wstr("Bạn có chắc muốn khôi phục lại nhãn 50 khay Feeder về mặc định ban đầu?").as_ptr(), to_wstr("Xác Nhận").as_ptr(), 0x00000020 | 0x00000004) == 6 {
-                    init_default_feeder_matrix_rust();
-                    let opt = FEEDER_MATRIX_RUST.lock().unwrap();
-                    if let Some(ref map) = *opt {
-                        for slot in 1..=50 {
-                            let h_ed = GetDlgItem(hwnd, 5000 + slot);
-                            if !h_ed.is_null() {
-                                let val = map.get(&slot).map(|s| s.as_str()).unwrap_or("");
-                                SetWindowTextW(h_ed, to_wstr(val).as_ptr());
-                            }
-                        }
-                    }
-                }
             } else if id == 2 { // Cancel
                 DestroyWindow(hwnd);
             }
@@ -1417,7 +1403,7 @@ unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
     let h_lbl_prof = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("📂 Cấu Hình:").as_ptr(), 0x50000002, 15, 14, 90, 20, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
     SendMessageW(h_lbl_prof, 0x0030, font_bold as usize, 1);
 
-    let h_cb_prof = CreateWindowExW(0, to_wstr("COMBOBOX").as_ptr(), to_wstr("").as_ptr(), 0x50000003 | 0x00200000, 110, 11, 160, 200, h_dlg, 3001 as *mut _, hinst, ptr::null_mut());
+    let h_cb_prof = CreateWindowExW(0, to_wstr("COMBOBOX").as_ptr(), to_wstr("").as_ptr(), 0x50000003 | 0x00200000, 110, 11, 160, 350, h_dlg, 3001 as *mut _, hinst, ptr::null_mut());
     SendMessageW(h_cb_prof, 0x0030, font_normal as usize, 1);
 
     let plist = list_feeder_profiles_rust();
@@ -1486,10 +1472,7 @@ unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
     let btn_save = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("💾 LƯU & ÁP DỤNG NGAY").as_ptr(), 0x50000001, 440, 675, 200, 36, h_dlg, 2001 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_save, 0x0030, font_bold as usize, 1);
 
-    let btn_reset = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("🔄 Mặc Định").as_ptr(), 0x50000000, 310, 675, 120, 36, h_dlg, 2002 as *mut _, hinst, ptr::null_mut());
-    SendMessageW(btn_reset, 0x0030, font_normal as usize, 1);
-
-    let btn_cancel = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Đóng").as_ptr(), 0x50000000, 215, 675, 85, 36, h_dlg, 2 as *mut _, hinst, ptr::null_mut());
+    let btn_cancel = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("✖ Đóng").as_ptr(), 0x50000000, 25, 675, 90, 36, h_dlg, 2 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_cancel, 0x0030, font_normal as usize, 1);
 }
 
