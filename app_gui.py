@@ -208,21 +208,28 @@ class FeederMatrixDialog(tk.Toplevel):
             self.entries[f_str] = e_cmt
             
     def load_profile_list(self):
+        mac_dinh_file = os.path.join(self.profiles_dir, "Mac_Dinh.json")
+        if not os.path.exists(mac_dinh_file):
+            self.save_profile_to_disk("Mac_Dinh", {str(k): v["comment"] for k, v in DEFAULT_FEEDER_DATA.items()})
+            
         profiles = []
         if os.path.exists(self.profiles_dir):
             for fname in os.listdir(self.profiles_dir):
                 if fname.endswith(".json"):
-                    profiles.append(os.path.splitext(fname)[0])
-        if not profiles:
-            profiles = ["Mac_Dinh"]
-            self.save_profile_to_disk("Mac_Dinh", {str(k): v["comment"] for k, v in DEFAULT_FEEDER_DATA.items()})
+                    stem = os.path.splitext(fname)[0]
+                    if stem != "Mac_Dinh":
+                        profiles.append(stem)
         profiles.sort()
+        profiles.insert(0, "Mac_Dinh")
+        
         self.cb_profile["values"] = profiles
         if self.profile_var.get() not in profiles:
-            self.profile_var.set(profiles[0])
+            self.profile_var.set("Mac_Dinh")
+            self.on_profile_selected()
             
     def on_profile_selected(self, event=None):
         prof_name = self.profile_var.get().strip()
+        if not prof_name: prof_name = "Mac_Dinh"
         filepath = os.path.join(self.profiles_dir, f"{prof_name}.json")
         if os.path.exists(filepath):
             try:
@@ -268,8 +275,8 @@ class FeederMatrixDialog(tk.Toplevel):
                 return
             feeders = self.get_current_ui_feeders()
             self.save_profile_to_disk(new_name, feeders)
-            self.load_profile_list()
             self.profile_var.set(new_name)
+            self.load_profile_list()
             messagebox.showinfo("Thành Công", f"Đã tạo mới cấu hình [{new_name}] thành công!", parent=self)
             
     def save_as_profile(self):
@@ -279,14 +286,14 @@ class FeederMatrixDialog(tk.Toplevel):
             if not new_name: return
             feeders = self.get_current_ui_feeders()
             self.save_profile_to_disk(new_name, feeders)
-            self.load_profile_list()
             self.profile_var.set(new_name)
+            self.load_profile_list()
             messagebox.showinfo("Thành Công", f"Đã lưu thành cấu hình [{new_name}] thành công!", parent=self)
             
     def delete_profile(self):
         prof_name = self.profile_var.get().strip()
-        if prof_name in ("Mac_Dinh", "Mặc Định"):
-            messagebox.showwarning("Không Thể Xóa", "Không thể xóa cấu hình mặc định [Mac_Dinh]!", parent=self)
+        if prof_name in ("Mac_Dinh", "Mặc Định", ""):
+            messagebox.showwarning("Không Thể Xóa", "Cấu hình mặc định [Mac_Dinh] là cấu hình gốc của máy và không thể xóa!", parent=self)
             return
         if messagebox.askyesno("Xác Nhận Xóa", f"Bạn có chắc muốn xóa vĩnh viễn cấu hình [{prof_name}]?", parent=self):
             filepath = os.path.join(self.profiles_dir, f"{prof_name}.json")
@@ -296,9 +303,10 @@ class FeederMatrixDialog(tk.Toplevel):
                 except Exception as e:
                     messagebox.showerror("Lỗi", f"Không thể xóa file: {e}", parent=self)
                     return
+            self.profile_var.set("Mac_Dinh")
             self.load_profile_list()
             self.on_profile_selected()
-            messagebox.showinfo("Thành Công", f"Đã xóa cấu hình [{prof_name}]!", parent=self)
+            messagebox.showinfo("Thành Công", f"Đã xóa cấu hình [{prof_name}]! Đã tự động chuyển về [Mac_Dinh].", parent=self)
             
     def save_and_apply(self):
         self.save_current_profile()
@@ -313,13 +321,6 @@ class FeederMatrixDialog(tk.Toplevel):
         self.app.apply_feeder_assignments_to_components()
         messagebox.showinfo("Thành Công", "🎉 Đã lưu cấu hình và tự động gán lại số khay Feeder trên toàn bộ bảng linh kiện!", parent=self)
         self.destroy()
-        
-    def reset_default(self):
-        if messagebox.askyesno("Xác nhận", "Khôi phục toàn bộ nhãn 50 khay Feeder về mặc định ban đầu?", parent=self):
-            for f_str, entry in self.entries.items():
-                cur = DEFAULT_FEEDER_DATA.get(f_str, {}).get("comment", "")
-                entry.delete(0, tk.END)
-                entry.insert(0, cur)
 
 
 class RowEditDialog(tk.Toplevel):

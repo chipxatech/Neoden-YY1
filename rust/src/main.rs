@@ -1033,29 +1033,27 @@ fn match_feeder_slot_rust(cmt: &str, fp: &str) -> i32 {
     1
 }
 
-fn list_feeder_profiles_rust() -> Vec<String> {
-    let _ = std::fs::create_dir_all("feeder_profiles");
-    let mut list = Vec::new();
-    if let Ok(entries) = std::fs::read_dir("feeder_profiles") {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
-                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    list.push(stem.to_string());
-                }
+fn get_profiles_dir_rust() -> std::path::PathBuf {
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(parent) = exe_path.parent() {
+            let p1 = parent.join("feeder_profiles");
+            if p1.is_dir() { return p1; }
+            if let Some(grandparent) = parent.parent() {
+                let p2 = grandparent.join("feeder_profiles");
+                if p2.is_dir() { return p2; }
             }
+            let _ = std::fs::create_dir_all(&p1);
+            return p1;
         }
     }
-    if list.is_empty() {
-        list.push("Mac_Dinh".to_string());
-    }
-    list.sort();
-    list
+    let p = std::path::PathBuf::from("feeder_profiles");
+    let _ = std::fs::create_dir_all(&p);
+    p
 }
 
 fn save_profile_to_disk_rust(prof_name: &str, data: &std::collections::HashMap<i32, String>) {
-    let _ = std::fs::create_dir_all("feeder_profiles");
-    let path = format!("feeder_profiles/{}.json", prof_name);
+    let p_dir = get_profiles_dir_rust();
+    let path = p_dir.join(format!("{}.json", prof_name));
     let mut json_str = format!("{{\n  \"profile_name\": \"{}\",\n  \"feeders\": {{\n", prof_name);
     for i in 1..=50 {
         let val = data.get(&i).map(|s| s.as_str()).unwrap_or("");
@@ -1066,10 +1064,45 @@ fn save_profile_to_disk_rust(prof_name: &str, data: &std::collections::HashMap<i
     let _ = std::fs::write("feeder_matrix.json", &json_str);
 }
 
+fn list_feeder_profiles_rust() -> Vec<String> {
+    let p_dir = get_profiles_dir_rust();
+    
+    // Đảm bảo Mac_Dinh.json luôn luôn tồn tại
+    let mac_dinh_path = p_dir.join("Mac_Dinh.json");
+    if !mac_dinh_path.exists() {
+        let mut def_map = std::collections::HashMap::new();
+        init_default_feeder_matrix_rust();
+        let opt = FEEDER_MATRIX_RUST.lock().unwrap();
+        if let Some(ref m) = *opt {
+            for (k, v) in m.iter() {
+                def_map.insert(*k, v.clone());
+            }
+        }
+        save_profile_to_disk_rust("Mac_Dinh", &def_map);
+    }
+
+    let mut list = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&p_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
+                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    if stem != "Mac_Dinh" {
+                        list.push(stem.to_string());
+                    }
+                }
+            }
+        }
+    }
+    list.sort();
+    list.insert(0, "Mac_Dinh".to_string());
+    list
+}
+
 fn load_profile_from_disk_rust(prof_name: &str) -> std::collections::HashMap<i32, String> {
     let mut map = std::collections::HashMap::new();
     for i in 1..=50 { map.insert(i, String::new()); }
-    let path = format!("feeder_profiles/{}.json", prof_name);
+    let path = get_profiles_dir_rust().join(format!("{}.json", prof_name));
     if let Ok(content) = std::fs::read_to_string(path) {
         for line in content.lines() {
             if let Some(q1) = line.find('"') {
@@ -1103,19 +1136,22 @@ unsafe extern "system" fn input_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usiz
                 let h_ed = GetDlgItem(hwnd, 101);
                 let mut buf = [0u16; 128];
                 GetWindowTextW(h_ed, buf.as_mut_ptr(), 128);
-                let mut guard = INPUT_DLG_BUFFER_RUST.lock().unwrap();
-                *guard = from_wstr(buf.as_ptr());
+                let val = from_wstr(buf.as_ptr());
+                {
+                    let mut guard = INPUT_DLG_BUFFER_RUST.lock().unwrap();
+                    *guard = val;
+                }
                 DestroyWindow(hwnd);
             } else if id == 2 { // IDCANCEL
-                let mut guard = INPUT_DLG_BUFFER_RUST.lock().unwrap();
-                guard.clear();
+                {
+                    let mut guard = INPUT_DLG_BUFFER_RUST.lock().unwrap();
+                    guard.clear();
+                }
                 DestroyWindow(hwnd);
             }
             0
         }
         0x0010 => { // WM_CLOSE
-            let mut guard = INPUT_DLG_BUFFER_RUST.lock().unwrap();
-            guard.clear();
             DestroyWindow(hwnd);
             0
         }
@@ -1299,12 +1335,13 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                 }
             } else if id == 3005 { // 🗑️ Xóa
                 let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
-                if act_name == "Mac_Dinh" || act_name == "Mặc Định" {
-                    MessageBoxW(hwnd, to_wstr("Không thể xóa cấu hình mặc định [Mac_Dinh]!").as_ptr(), to_wstr("Thông Báo").as_ptr(), 0x00000030);
+                if act_name == "Mac_Dinh" || act_name == "Mặc Định" || act_name.is_empty() {
+                    MessageBoxW(hwnd, to_wstr("Cấu hình mặc định [Mac_Dinh] là cấu hình gốc của máy và không thể xóa!").as_ptr(), to_wstr("Thông Báo").as_ptr(), 0x00000030);
                     return 0;
                 }
                 if MessageBoxW(hwnd, to_wstr("Bạn có chắc muốn xóa vĩnh viễn cấu hình này?").as_ptr(), to_wstr("Xác Nhận Xóa").as_ptr(), 0x00000020 | 0x00000004) == 6 {
-                    let _ = std::fs::remove_file(format!("feeder_profiles/{}.json", act_name));
+                    let p_dir = get_profiles_dir_rust();
+                    let _ = std::fs::remove_file(p_dir.join(format!("{}.json", act_name)));
                     {
                         let mut act = ACTIVE_PROFILE_RUST.lock().unwrap();
                         *act = "Mac_Dinh".to_string();
@@ -1326,7 +1363,7 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                             SetWindowTextW(h_ed, to_wstr(val).as_ptr());
                         }
                     }
-                    MessageBoxW(hwnd, to_wstr("Đã xóa cấu hình!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
+                    MessageBoxW(hwnd, to_wstr("Đã xóa cấu hình! Đã tự động chuyển về [Mac_Dinh].").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
                 }
             } else if id == 1 || id == 2001 { // 💾 Lưu & Áp Dụng
                 let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };

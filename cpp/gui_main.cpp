@@ -663,33 +663,29 @@ static bool showInputBoxCpp(HWND parent, const wchar_t* title, const wchar_t* pr
     return false;
 }
 
-static std::vector<std::wstring> listFeederProfilesCpp() {
-    std::vector<std::wstring> list;
-    CreateDirectoryW(L"feeder_profiles", NULL);
-    WIN32_FIND_DATAW ffd;
-    HANDLE hFind = FindFirstFileW(L"feeder_profiles\\*.json", &ffd);
-    if (hFind != INVALID_HANDLE_VALUE) {
-        do {
-            if (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-                std::wstring fn = ffd.cFileName;
-                size_t p = fn.rfind(L".json");
-                if (p != std::wstring::npos) {
-                    list.push_back(fn.substr(0, p));
-                }
-            }
-        } while (FindNextFileW(hFind, &ffd) != 0);
-        FindClose(hFind);
-    }
-    if (list.empty()) {
-        list.push_back(L"Mac_Dinh");
-    }
-    std::sort(list.begin(), list.end());
-    return list;
+static std::wstring getProfilesDirectoryCpp() {
+    wchar_t exePath[MAX_PATH];
+    GetModuleFileNameW(NULL, exePath, MAX_PATH);
+    std::wstring s(exePath);
+    size_t pos = s.find_last_of(L"\\/");
+    std::wstring dir = (pos != std::wstring::npos) ? s.substr(0, pos) : L".";
+    
+    std::wstring p1 = dir + L"\\feeder_profiles";
+    std::wstring p2 = dir + L"\\..\\feeder_profiles";
+    
+    DWORD dw1 = GetFileAttributesW(p1.c_str());
+    if (dw1 != INVALID_FILE_ATTRIBUTES && (dw1 & FILE_ATTRIBUTE_DIRECTORY)) return p1;
+    
+    DWORD dw2 = GetFileAttributesW(p2.c_str());
+    if (dw2 != INVALID_FILE_ATTRIBUTES && (dw2 & FILE_ATTRIBUTE_DIRECTORY)) return p2;
+    
+    CreateDirectoryW(p1.c_str(), NULL);
+    return p1;
 }
 
 static void saveProfileToDiskCpp(const std::wstring& profName, const std::map<int, std::wstring>& feeders) {
-    CreateDirectoryW(L"feeder_profiles", NULL);
-    std::wstring path = L"feeder_profiles\\" + profName + L".json";
+    std::wstring pDir = getProfilesDirectoryCpp();
+    std::wstring path = pDir + L"\\" + profName + L".json";
     std::ofstream out(ws2s(path));
     if (out.is_open()) {
         out << "{\n  \"profile_name\": \"" << ws2s(profName) << "\",\n  \"feeders\": {\n";
@@ -722,9 +718,45 @@ static void saveProfileToDiskCpp(const std::wstring& profName, const std::map<in
     }
 }
 
+static std::vector<std::wstring> listFeederProfilesCpp() {
+    std::wstring pDir = getProfilesDirectoryCpp();
+    
+    // Đảm bảo Mac_Dinh.json luôn luôn tồn tại
+    std::wstring macDinhPath = pDir + L"\\Mac_Dinh.json";
+    DWORD dw = GetFileAttributesW(macDinhPath.c_str());
+    if (dw == INVALID_FILE_ATTRIBUTES) {
+        std::map<int, std::wstring> defFd;
+        for (int i = 1; i <= 50; ++i) defFd[i] = g_feeder_matrix[i].comment;
+        saveProfileToDiskCpp(L"Mac_Dinh", defFd);
+    }
+
+    std::vector<std::wstring> list;
+    WIN32_FIND_DATAW ffd;
+    std::wstring searchPattern = pDir + L"\\*.json";
+    HANDLE hFind = FindFirstFileW(searchPattern.c_str(), &ffd);
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            if (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                std::wstring fn = ffd.cFileName;
+                size_t p = fn.rfind(L".json");
+                if (p != std::wstring::npos) {
+                    std::wstring stem = fn.substr(0, p);
+                    if (stem != L"Mac_Dinh") {
+                        list.push_back(stem);
+                    }
+                }
+            }
+        } while (FindNextFileW(hFind, &ffd) != 0);
+        FindClose(hFind);
+    }
+    std::sort(list.begin(), list.end());
+    list.insert(list.begin(), L"Mac_Dinh");
+    return list;
+}
+
 static void loadProfileFromDiskCpp(const std::wstring& profName, std::map<int, std::wstring>& feeders) {
     for (int i = 1; i <= 50; ++i) feeders[i] = L"";
-    std::wstring path = L"feeder_profiles\\" + profName + L".json";
+    std::wstring path = getProfilesDirectoryCpp() + L"\\" + profName + L".json";
     std::ifstream in(ws2s(path));
     if (!in.is_open()) return;
 
@@ -847,12 +879,13 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
                 MessageBoxW(hWnd, (L"🎉 Đã lưu thành cấu hình [" + newName + L"] thành công!").c_str(), L"Thành Công", MB_ICONINFORMATION);
             }
         } else if (wmId == 3005) { // 🗑️ Xóa Profile
-            if (g_active_profile == L"Mac_Dinh" || g_active_profile == L"Mặc Định") {
-                MessageBoxW(hWnd, L"Không thể xóa cấu hình mặc định [Mac_Dinh]!", L"Thông Báo", MB_ICONWARNING);
+            if (g_active_profile == L"Mac_Dinh" || g_active_profile == L"Mặc Định" || g_active_profile.empty()) {
+                MessageBoxW(hWnd, L"Cấu hình mặc định [Mac_Dinh] là cấu hình gốc của máy và không thể xóa!", L"Thông Báo", MB_ICONWARNING);
                 break;
             }
             if (MessageBoxW(hWnd, (L"Bạn có chắc muốn xóa vĩnh viễn cấu hình [" + g_active_profile + L"]?").c_str(), L"Xác Nhận Xóa", MB_ICONQUESTION | MB_YESNO) == IDYES) {
-                DeleteFileW((L"feeder_profiles\\" + g_active_profile + L".json").c_str());
+                std::wstring delPath = getProfilesDirectoryCpp() + L"\\" + g_active_profile + L".json";
+                DeleteFileW(delPath.c_str());
                 g_active_profile = L"Mac_Dinh";
                 HWND hCb = GetDlgItem(hWnd, 3001);
                 SendMessageW(hCb, CB_RESETCONTENT, 0, 0);
@@ -866,7 +899,7 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
                 std::map<int, std::wstring> fd;
                 loadProfileFromDiskCpp(g_active_profile, fd);
                 updateDialogFromMapCpp(hWnd, fd);
-                MessageBoxW(hWnd, L"Đã xóa cấu hình!", L"Thành Công", MB_ICONINFORMATION);
+                MessageBoxW(hWnd, L"Đã xóa cấu hình! Đã tự động chuyển về [Mac_Dinh].", L"Thành Công", MB_ICONINFORMATION);
             }
         } else if (wmId == IDOK || wmId == 2001) { // 💾 Lưu & Áp Dụng
             auto fd = getDialogFeedersCpp(hWnd);

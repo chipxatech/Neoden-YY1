@@ -511,10 +511,40 @@ static bool show_input_box_c(HWND parent, const wchar_t* title, const wchar_t* p
     return false;
 }
 
+static void get_profiles_directory_c(wchar_t* outDir, int maxLen) {
+    wchar_t exePath[MAX_PATH];
+    GetModuleFileNameW(NULL, exePath, MAX_PATH);
+    wchar_t* lastSlash = wcsrchr(exePath, L'\\');
+    if (!lastSlash) lastSlash = wcsrchr(exePath, L'/');
+    if (lastSlash) *lastSlash = L'\0';
+    else wcscpy(exePath, L".");
+
+    wchar_t p1[MAX_PATH], p2[MAX_PATH];
+    swprintf(p1, MAX_PATH, L"%ls\\feeder_profiles", exePath);
+    swprintf(p2, MAX_PATH, L"%ls\\..\\feeder_profiles", exePath);
+
+    DWORD dw1 = GetFileAttributesW(p1);
+    if (dw1 != INVALID_FILE_ATTRIBUTES && (dw1 & FILE_ATTRIBUTE_DIRECTORY)) {
+        wcsncpy(outDir, p1, maxLen - 1);
+        outDir[maxLen - 1] = L'\0';
+        return;
+    }
+    DWORD dw2 = GetFileAttributesW(p2);
+    if (dw2 != INVALID_FILE_ATTRIBUTES && (dw2 & FILE_ATTRIBUTE_DIRECTORY)) {
+        wcsncpy(outDir, p2, maxLen - 1);
+        outDir[maxLen - 1] = L'\0';
+        return;
+    }
+    CreateDirectoryW(p1, NULL);
+    wcsncpy(outDir, p1, maxLen - 1);
+    outDir[maxLen - 1] = L'\0';
+}
+
 static void save_profile_to_disk_c(const wchar_t* profName) {
-    CreateDirectoryW(L"feeder_profiles", NULL);
-    wchar_t path[260];
-    swprintf(path, 260, L"feeder_profiles\\%s.json", profName);
+    wchar_t pDir[MAX_PATH];
+    get_profiles_directory_c(pDir, MAX_PATH);
+    wchar_t path[MAX_PATH];
+    swprintf(path, MAX_PATH, L"%ls\\%ls.json", pDir, profName);
     FILE* fp = _wfopen(path, L"w, ccs=UTF-8");
     if (fp) {
         char pNameA[128] = {0};
@@ -544,8 +574,10 @@ static void save_profile_to_disk_c(const wchar_t* profName) {
 
 static void load_profile_from_disk_c(const wchar_t* profName) {
     for (int i = 1; i <= 50; ++i) g_feeder_matrix_c[i].comment[0] = '\0';
-    wchar_t path[260];
-    swprintf(path, 260, L"feeder_profiles\\%s.json", profName);
+    wchar_t pDir[MAX_PATH];
+    get_profiles_directory_c(pDir, MAX_PATH);
+    wchar_t path[MAX_PATH];
+    swprintf(path, MAX_PATH, L"%ls\\%ls.json", pDir, profName);
     FILE* fp = _wfopen(path, L"r, ccs=UTF-8");
     if (!fp) return;
 
@@ -576,27 +608,41 @@ static void load_profile_from_disk_c(const wchar_t* profName) {
 
 static void populate_profile_combobox_c(HWND hCb) {
     SendMessageW(hCb, CB_RESETCONTENT, 0, 0);
-    CreateDirectoryW(L"feeder_profiles", NULL);
+    wchar_t pDir[MAX_PATH];
+    get_profiles_directory_c(pDir, MAX_PATH);
+
+    // Đảm bảo Mac_Dinh.json luôn tồn tại
+    wchar_t macDinhPath[MAX_PATH];
+    swprintf(macDinhPath, MAX_PATH, L"%ls\\Mac_Dinh.json", pDir);
+    DWORD dw = GetFileAttributesW(macDinhPath);
+    if (dw == INVALID_FILE_ATTRIBUTES) {
+        save_profile_to_disk_c(L"Mac_Dinh");
+    }
+
+    SendMessageW(hCb, CB_ADDSTRING, 0, (LPARAM)L"Mac_Dinh");
+
     WIN32_FIND_DATAW ffd;
-    HANDLE hFind = FindFirstFileW(L"feeder_profiles\\*.json", &ffd);
-    int selIdx = 0, count = 0;
+    wchar_t searchPattern[MAX_PATH];
+    swprintf(searchPattern, MAX_PATH, L"%ls\\*.json", pDir);
+    HANDLE hFind = FindFirstFileW(searchPattern, &ffd);
+    int selIdx = 0, count = 1;
     if (hFind != INVALID_HANDLE_VALUE) {
         do {
             if (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
                 wchar_t* ext = wcsrchr(ffd.cFileName, L'.');
                 if (ext && _wcsicmp(ext, L".json") == 0) {
                     *ext = L'\0';
-                    SendMessageW(hCb, CB_ADDSTRING, 0, (LPARAM)ffd.cFileName);
-                    if (wcscmp(ffd.cFileName, g_active_profile_c) == 0) selIdx = count;
-                    count++;
+                    if (_wcsicmp(ffd.cFileName, L"Mac_Dinh") != 0) {
+                        SendMessageW(hCb, CB_ADDSTRING, 0, (LPARAM)ffd.cFileName);
+                        if (wcscmp(ffd.cFileName, g_active_profile_c) == 0) selIdx = count;
+                        count++;
+                    }
                 }
             }
         } while (FindNextFileW(hFind, &ffd) != 0);
         FindClose(hFind);
     }
-    if (count == 0) {
-        SendMessageW(hCb, CB_ADDSTRING, 0, (LPARAM)L"Mac_Dinh");
-    }
+    if (wcscmp(g_active_profile_c, L"Mac_Dinh") == 0) selIdx = 0;
     SendMessageW(hCb, CB_SETCURSEL, selIdx, 0);
 }
 
@@ -679,13 +725,15 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
                 MessageBoxW(hWnd, L"🎉 Đã lưu thành cấu hình mới!", L"Thành Công", MB_ICONINFORMATION);
             }
         } else if (wmId == 3005) { // 🗑️ Xóa
-            if (wcscmp(g_active_profile_c, L"Mac_Dinh") == 0 || wcscmp(g_active_profile_c, L"Mặc Định") == 0) {
-                MessageBoxW(hWnd, L"Không thể xóa cấu hình mặc định [Mac_Dinh]!", L"Thông Báo", MB_ICONWARNING);
+            if (wcscmp(g_active_profile_c, L"Mac_Dinh") == 0 || wcscmp(g_active_profile_c, L"Mặc Định") == 0 || g_active_profile_c[0] == L'\0') {
+                MessageBoxW(hWnd, L"Cấu hình mặc định [Mac_Dinh] là cấu hình gốc của máy và không thể xóa!", L"Thông Báo", MB_ICONWARNING);
                 break;
             }
             if (MessageBoxW(hWnd, L"Bạn có chắc muốn xóa vĩnh viễn cấu hình này?", L"Xác Nhận Xóa", MB_ICONQUESTION | MB_YESNO) == IDYES) {
-                wchar_t path[260];
-                swprintf(path, 260, L"feeder_profiles\\%s.json", g_active_profile_c);
+                wchar_t pDir[MAX_PATH];
+                get_profiles_directory_c(pDir, MAX_PATH);
+                wchar_t path[MAX_PATH];
+                swprintf(path, MAX_PATH, L"%ls\\%ls.json", pDir, g_active_profile_c);
                 DeleteFileW(path);
                 wcscpy(g_active_profile_c, L"Mac_Dinh");
                 HWND hCb = GetDlgItem(hWnd, 3001);
@@ -699,7 +747,7 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
                         SetWindowTextW(hEd, wVal);
                     }
                 }
-                MessageBoxW(hWnd, L"Đã xóa cấu hình!", L"Thành Công", MB_ICONINFORMATION);
+                MessageBoxW(hWnd, L"Đã xóa cấu hình! Đã tự động chuyển về [Mac_Dinh].", L"Thành Công", MB_ICONINFORMATION);
             }
         } else if (wmId == IDOK || wmId == 2001) { // 💾 Lưu & Áp Dụng
             for (int slot = 1; slot <= 50; ++slot) {
