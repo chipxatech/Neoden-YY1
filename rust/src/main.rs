@@ -474,7 +474,6 @@ fn normalize_comment(cmt: &str) -> String {
     if cl == "nguon" { return "POWER_HDR".to_string(); }
     if cl == "bomkhi" { return "AIR_PUMP".to_string(); }
     if cl == "vankhi" { return "AIR_VALVE".to_string(); }
-    if cl.contains("led 0603") || cl == "led" { return "LED_0603".to_string(); }
     if cl.contains("sdcard") || cl.contains("tf3") { return "MICRO_SD_TF3".to_string(); }
     if cl.contains("pressure sensor") { return "PRESSURE_SENSOR".to_string(); }
     cmt.trim().to_string()
@@ -1013,25 +1012,78 @@ fn init_default_feeder_matrix_rust() {
     *opt = Some(map);
 }
 
-fn match_feeder_slot_rust(cmt: &str, fp: &str) -> i32 {
-    let cmt_clean = cmt.trim().to_lowercase();
-    let fp_clean = fp.trim().to_lowercase();
-    if cmt_clean.is_empty() && fp_clean.is_empty() { return 0; }
+fn remove_diacritics_rust(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.to_lowercase().chars() {
+        match c {
+            'á' | 'à' | 'ả' | 'ã' | 'ạ' | 'ă' | 'ắ' | 'ằ' | 'ẳ' | 'ẵ' | 'ặ' | 'â' | 'ấ' | 'ầ' | 'ẩ' | 'ẫ' | 'ậ' => out.push('a'),
+            'é' | 'è' | 'ẻ' | 'ẽ' | 'ẹ' | 'ê' | 'ế' | 'ề' | 'ể' | 'ễ' | 'ệ' => out.push('e'),
+            'í' | 'ì' | 'ỉ' | 'ĩ' | 'ị' => out.push('i'),
+            'ó' | 'ò' | 'ỏ' | 'õ' | 'ọ' | 'ô' | 'ố' | 'ồ' | 'ổ' | 'ỗ' | 'ộ' | 'ơ' | 'ớ' | 'ờ' | 'ở' | 'ỡ' | 'ợ' => out.push('o'),
+            'ú' | 'ù' | 'ủ' | 'ũ' | 'ụ' | 'ư' | 'ứ' | 'ừ' | 'ử' | 'ữ' | 'ự' => out.push('u'),
+            'ý' | 'ỳ' | 'ỷ' | 'ỹ' | 'ỵ' => out.push('y'),
+            'đ' => out.push('d'),
+            _ => out.push(c),
+        }
+    }
+    out
+}
 
-    let full_pair = format!("{}-{}", cmt_clean, fp_clean);
+fn canonicalize_feeder_keywords_rust(input: &str) -> String {
+    let s = remove_diacritics_rust(input);
+    let mut out = s
+        .replace("xanh la", "green")
+        .replace("xanh cay", "green")
+        .replace("xanh duong", "blue")
+        .replace("xanh bien", "blue")
+        .replace("xanh", "green")
+        .replace("vang", "yellow")
+        .replace("trang", "white")
+        .replace("cam", "orange");
+
+    // Replace isolated 'do' with 'red'
+    let words: Vec<&str> = out.split_whitespace().collect();
+    let replaced_words: Vec<String> = words.iter().map(|&w| if w == "do" { "red".to_string() } else { w.replace("do", "red") }).collect();
+    if !replaced_words.is_empty() {
+        out = replaced_words.join(" ");
+    }
+    out
+}
+
+fn match_feeder_slot_rust(cmt: &str, fp: &str) -> i32 {
+    let cmt_can = canonicalize_feeder_keywords_rust(cmt);
+    let fp_can = canonicalize_feeder_keywords_rust(fp);
+    if cmt_can.is_empty() && fp_can.is_empty() { return 0; }
+
+    let packages = ["0402", "0603", "0805", "1206", "1210", "sod-123", "sod-323", "sot-23", "sop-8", "sop-16", "sma", "smb", "smc"];
+    let mut comp_pkg = "";
+    for &pkg in &packages {
+        if cmt_can.contains(pkg) || fp_can.contains(pkg) {
+            comp_pkg = pkg;
+            break;
+        }
+    }
+
+    let colors = ["red", "green", "blue", "yellow", "white", "orange"];
+    let mut comp_color = "";
+    for &clr in &colors {
+        if cmt_can.contains(clr) {
+            comp_color = clr;
+            break;
+        }
+    }
+
     let opt = FEEDER_MATRIX_RUST.lock().unwrap();
     if let Some(ref map) = *opt {
-        // 1. Khớp tuyệt đối Value-Footprint (VD: 1k-0603, 10k-0805)
-        for slot in 1..=50 {
-            if let Some(val) = map.get(&slot) {
-                let v_clean = val.trim().to_lowercase();
-                if !v_clean.is_empty() {
-                    if v_clean == full_pair { return slot; }
-                    if let Some(dash_idx) = v_clean.find('-') {
-                        let val_p = v_clean[..dash_idx].trim();
-                        let fp_p = v_clean[dash_idx + 1..].trim();
-                        if (val_p == cmt_clean || (!val_p.is_empty() && cmt_clean.contains(val_p)) || (!cmt_clean.is_empty() && val_p.contains(&cmt_clean))) &&
-                           (fp_p == fp_clean || (!fp_p.is_empty() && fp_clean.contains(fp_p)) || (!fp_clean.is_empty() && fp_p.contains(&fp_clean))) {
+        // 1. Nếu có màu (LED, etc.): Khớp Màu và Kích Thước (VD: led do 0603 -> red + 0603 -> slot 34)
+        if !comp_color.is_empty() {
+            for slot in 1..=50 {
+                if let Some(val) = map.get(&slot) {
+                    let f_can = canonicalize_feeder_keywords_rust(val);
+                    if f_can.contains(comp_color) {
+                        if !comp_pkg.is_empty() {
+                            if f_can.contains(comp_pkg) { return slot; }
+                        } else {
                             return slot;
                         }
                     }
@@ -1039,21 +1091,40 @@ fn match_feeder_slot_rust(cmt: &str, fp: &str) -> i32 {
             }
         }
 
-        // 2. Khớp chính xác Comment
+        // 2. Khớp tuyệt đối Value-Footprint (VD: 1k-0603, 10k-0805)
+        let full_pair = format!("{}-{}", cmt_can, fp_can);
         for slot in 1..=50 {
             if let Some(val) = map.get(&slot) {
-                let v_clean = val.trim().to_lowercase();
-                if !v_clean.is_empty() && v_clean == cmt_clean {
+                let f_can = canonicalize_feeder_keywords_rust(val);
+                if !f_can.is_empty() {
+                    if f_can == full_pair { return slot; }
+                    if let Some(dash_idx) = f_can.find('-') {
+                        let val_p = f_can[..dash_idx].trim();
+                        let fp_p = f_can[dash_idx + 1..].trim();
+                        if (val_p == cmt_can || (!val_p.is_empty() && cmt_can.contains(val_p)) || (!cmt_can.is_empty() && val_p.contains(&cmt_can))) &&
+                           (fp_p == fp_can || (!fp_p.is_empty() && fp_can.contains(fp_p)) || (!fp_can.is_empty() && fp_p.contains(&fp_can))) {
+                            return slot;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Khớp chính xác Comment
+        for slot in 1..=50 {
+            if let Some(val) = map.get(&slot) {
+                let f_can = canonicalize_feeder_keywords_rust(val);
+                if !f_can.is_empty() && f_can == cmt_can {
                     return slot;
                 }
             }
         }
 
-        // 3. Khớp mờ / chứa Comment
+        // 4. Khớp mờ / chứa Comment
         for slot in 1..=50 {
             if let Some(val) = map.get(&slot) {
-                let v_clean = val.trim().to_lowercase();
-                if !v_clean.is_empty() && (v_clean.contains(&cmt_clean) || cmt_clean.contains(&v_clean)) {
+                let f_can = canonicalize_feeder_keywords_rust(val);
+                if !f_can.is_empty() && (f_can.contains(&cmt_can) || cmt_can.contains(&f_can)) {
                     return slot;
                 }
             }

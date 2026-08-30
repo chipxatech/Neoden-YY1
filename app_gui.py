@@ -842,10 +842,34 @@ class NeoDenYY1App:
         if cl == "nguon": return "POWER_HDR"
         if cl == "bomkhi": return "AIR_PUMP"
         if cl == "vankhi": return "AIR_VALVE"
-        if "led 0603" in cl or cl == "led": return "LED_0603"
         if "sdcard" in cl or "tf3" in cl: return "MICRO_SD_TF3"
         if "pressure sensor" in cl: return "PRESSURE_SENSOR"
         return c
+
+    def remove_diacritics(self, text):
+        s = text.lower()
+        replacements = {
+            'á': 'a', 'à': 'a', 'ả': 'a', 'ã': 'a', 'ạ': 'a', 'ă': 'a', 'ắ': 'a', 'ằ': 'a', 'ẳ': 'a', 'ẵ': 'a', 'ặ': 'a', 'â': 'a', 'ấ': 'a', 'ầ': 'a', 'ẩ': 'a', 'ẫ': 'a', 'ậ': 'a',
+            'é': 'e', 'è': 'e', 'ẻ': 'e', 'ẽ': 'e', 'ẹ': 'e', 'ê': 'e', 'ế': 'e', 'ề': 'e', 'ể': 'e', 'ễ': 'e', 'ệ': 'e',
+            'í': 'i', 'ì': 'i', 'ỉ': 'i', 'ĩ': 'i', 'ị': 'i',
+            'ó': 'o', 'ò': 'o', 'ỏ': 'o', 'õ': 'o', 'ọ': 'o', 'ô': 'o', 'ố': 'o', 'ồ': 'o', 'ổ': 'o', 'ỗ': 'o', 'ộ': 'o', 'ơ': 'o', 'ớ': 'o', 'ờ': 'o', 'ở': 'o', 'ỡ': 'o', 'ợ': 'o',
+            'ú': 'u', 'ù': 'u', 'ủ': 'u', 'ũ': 'u', 'ụ': 'u', 'ư': 'u', 'ứ': 'u', 'ừ': 'u', 'ử': 'u', 'ữ': 'u', 'ự': 'u',
+            'ý': 'y', 'ỳ': 'y', 'ỷ': 'y', 'ỹ': 'y', 'ỵ': 'y',
+            'đ': 'd'
+        }
+        for k, v in replacements.items():
+            s = s.replace(k, v)
+        return s
+
+    def canonicalize_feeder_keywords(self, text):
+        s = self.remove_diacritics(text)
+        s = s.replace("xanh la", "green").replace("xanh cay", "green")
+        s = s.replace("xanh duong", "blue").replace("xanh bien", "blue")
+        s = s.replace("xanh", "green")
+        s = s.replace("vang", "yellow").replace("trang", "white").replace("cam", "orange")
+        words = s.split()
+        words = ["red" if w == "do" else w for w in words]
+        return " ".join(words)
 
     def natural_sort_key(self, comp):
         cmt = str(comp.get("comment", "")).lower()
@@ -857,50 +881,79 @@ class NeoDenYY1App:
 
     def find_feeder_no(self, comment, footprint):
         """Khớp linh kiện thông minh vào khay Feeder đã thiết lập theo 4 góc"""
-        cmt_clean = comment.strip().lower()
-        fp_clean = footprint.strip().lower()
-        if not cmt_clean and not fp_clean:
+        cmt_can = self.canonicalize_feeder_keywords(str(comment))
+        fp_can = self.canonicalize_feeder_keywords(str(footprint))
+        if not cmt_can and not fp_can:
             return 0, 0, 100
-            
-        full_pair = f"{cmt_clean}-{fp_clean}"
-        
-        # 1. Khớp tuyệt đối cả Comment & Footprint dạng "Value-Footprint" (VD: 1K-0603, 10K-0805, Red-0805)
+
+        packages = ["0402", "0603", "0805", "1206", "1210", "sod-123", "sod-323", "sot-23", "sop-8", "sop-16", "sma", "smb", "smc"]
+        comp_pkg = ""
+        for pkg in packages:
+            if pkg in cmt_can or pkg in fp_can:
+                comp_pkg = pkg
+                break
+
+        colors = ["red", "green", "blue", "yellow", "white", "orange"]
+        comp_color = ""
+        for clr in colors:
+            if clr in cmt_can:
+                comp_color = clr
+                break
+
+        # 1. Nếu có màu (LED, etc.): Khớp Màu và Kích Thước (VD: led do 0603 -> red + 0603 -> slot 34)
+        if comp_color:
+            for f_id, f_cfg in self.feeder_matrix.items():
+                cfg_raw = f_cfg.get("comment", "") if isinstance(f_cfg, dict) else str(f_cfg)
+                f_can = self.canonicalize_feeder_keywords(cfg_raw)
+                if comp_color in f_can:
+                    if comp_pkg:
+                        if comp_pkg in f_can:
+                            hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
+                            spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
+                            return int(f_id), hd, spd
+                    else:
+                        hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
+                        spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
+                        return int(f_id), hd, spd
+
+        # 2. Khớp tuyệt đối cả Comment & Footprint dạng "Value-Footprint" (VD: 1K-0603, 10K-0805, Red-0805)
+        full_pair = f"{cmt_can}-{fp_can}"
         for f_id, f_cfg in self.feeder_matrix.items():
             cfg_raw = f_cfg.get("comment", "") if isinstance(f_cfg, dict) else str(f_cfg)
-            cfg_clean = cfg_raw.strip().lower()
-            if not cfg_clean: continue
+            f_can = self.canonicalize_feeder_keywords(cfg_raw)
+            if not f_can: continue
             
-            if cfg_clean == full_pair:
+            if f_can == full_pair:
                 hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
                 spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
                 return int(f_id), hd, spd
                 
-            if "-" in cfg_clean:
-                parts = cfg_clean.split("-", 1)
+            if "-" in f_can:
+                parts = f_can.split("-", 1)
                 val_p = parts[0].strip()
                 fp_p = parts[1].strip()
-                if (val_p == cmt_clean or (val_p and val_p in cmt_clean) or (cmt_clean and cmt_clean in val_p)) and \
-                   (fp_p == fp_clean or (fp_p and fp_p in fp_clean) or (fp_clean and fp_clean in fp_p)):
+                if (val_p == cmt_can or (val_p and val_p in cmt_can) or (cmt_can and cmt_can in val_p)) and \
+                   (fp_p == fp_can or (fp_p and fp_p in fp_can) or (fp_can and fp_can in fp_p)):
                     hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
                     spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
                     return int(f_id), hd, spd
 
-        # 2. Khớp chính xác Comment
+        # 3. Khớp chính xác Comment
         for f_id, f_cfg in self.feeder_matrix.items():
             cfg_raw = f_cfg.get("comment", "") if isinstance(f_cfg, dict) else str(f_cfg)
-            cfg_clean = cfg_raw.strip().lower()
-            if not cfg_clean: continue
-            if cfg_clean == cmt_clean:
+            f_can = self.canonicalize_feeder_keywords(cfg_raw)
+            if not f_can: continue
+            if f_can == cmt_can:
                 hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
                 spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
                 return int(f_id), hd, spd
 
-        # 3. Khớp mờ / chứa comment
+        # 4. Khớp mờ / chứa comment
         for f_id, f_cfg in self.feeder_matrix.items():
             cfg_raw = f_cfg.get("comment", "") if isinstance(f_cfg, dict) else str(f_cfg)
-            cfg_clean = cfg_raw.strip().lower()
-            if not cfg_clean: continue
-            if (cfg_clean in cmt_clean) or (cmt_clean in cfg_clean):
+            f_can = self.canonicalize_feeder_keywords(cfg_raw)
+            if not f_can: continue
+            if (f_can in cmt_can) or (cmt_can in f_can):
                 hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
                 spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
                 return int(f_id), hd, spd

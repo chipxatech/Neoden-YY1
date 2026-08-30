@@ -394,62 +394,132 @@ static void init_default_feeder_matrix_c(void) {
     strcpy(g_feeder_matrix_c[35].comment, "Blue-0603");
 }
 
-static int match_feeder_slot_c(const char* cmt, const char* fp) {
-    if (!cmt || !cmt[0]) return 0;
-    char cmt_lower[64] = {0};
-    strncpy(cmt_lower, cmt, sizeof(cmt_lower) - 1);
-    for (int i = 0; cmt_lower[i]; i++) cmt_lower[i] = (char)tolower(cmt_lower[i]);
+static void canonicalize_feeder_keywords_c(const char* src, char* dst, size_t dst_len) {
+    if (!src || !dst || dst_len == 0) return;
+    dst[0] = '\0';
 
-    char fp_lower[64] = {0};
-    if (fp) {
-        strncpy(fp_lower, fp, sizeof(fp_lower) - 1);
-        for (int i = 0; fp_lower[i]; i++) fp_lower[i] = (char)tolower(fp_lower[i]);
+    char temp[256] = {0};
+    size_t ti = 0;
+    for (size_t i = 0; src[i] && ti < sizeof(temp) - 1; ++i) {
+        unsigned char c = (unsigned char)src[i];
+        if (c >= 'A' && c <= 'Z') c = (unsigned char)tolower(c);
+        temp[ti++] = (char)c;
+    }
+    temp[ti] = '\0';
+
+    char step1[256] = {0};
+    size_t s1 = 0;
+    for (size_t i = 0; temp[i] && s1 < sizeof(step1) - 8; ) {
+        if (strncmp(&temp[i], "xanh la", 7) == 0 || strncmp(&temp[i], "xanh cay", 8) == 0) {
+            strcpy(&step1[s1], "green"); s1 += 5; i += (temp[i+5] == 'l' ? 7 : 8);
+        } else if (strncmp(&temp[i], "xanh duong", 10) == 0 || strncmp(&temp[i], "xanh bien", 9) == 0) {
+            strcpy(&step1[s1], "blue"); s1 += 4; i += (temp[i+5] == 'd' ? 10 : 9);
+        } else if (strncmp(&temp[i], "xanh", 4) == 0) {
+            strcpy(&step1[s1], "green"); s1 += 5; i += 4;
+        } else if (strncmp(&temp[i], "vang", 4) == 0) {
+            strcpy(&step1[s1], "yellow"); s1 += 6; i += 4;
+        } else if (strncmp(&temp[i], "trang", 5) == 0) {
+            strcpy(&step1[s1], "white"); s1 += 5; i += 5;
+        } else if (strncmp(&temp[i], "do", 2) == 0) {
+            bool b_ok = (i == 0 || !isalnum((unsigned char)temp[i-1]));
+            bool a_ok = (temp[i+2] == '\0' || !isalnum((unsigned char)temp[i+2]));
+            if (b_ok && a_ok) {
+                strcpy(&step1[s1], "red"); s1 += 3; i += 2;
+            } else {
+                step1[s1++] = temp[i++];
+            }
+        } else {
+            step1[s1++] = temp[i++];
+        }
+    }
+    step1[s1] = '\0';
+    strncpy(dst, step1, dst_len - 1);
+    dst[dst_len - 1] = '\0';
+}
+
+static int match_feeder_slot_c(const char* cmt, const char* fp) {
+    if (!cmt && !fp) return 0;
+    char cmt_can[128] = {0};
+    char fp_can[128] = {0};
+    if (cmt) canonicalize_feeder_keywords_c(cmt, cmt_can, sizeof(cmt_can));
+    if (fp) canonicalize_feeder_keywords_c(fp, fp_can, sizeof(fp_can));
+    if (!cmt_can[0] && !fp_can[0]) return 0;
+
+    const char* packages[] = {"0402", "0603", "0805", "1206", "1210", "sod-123", "sod-323", "sot-23", "sop-8", "sop-16", "sma", "smb", "smc", NULL};
+    char comp_pkg[32] = {0};
+    for (int p = 0; packages[p]; ++p) {
+        if (strstr(cmt_can, packages[p]) || strstr(fp_can, packages[p])) {
+            strcpy(comp_pkg, packages[p]);
+            break;
+        }
     }
 
-    char full_pair[128] = {0};
-    snprintf(full_pair, sizeof(full_pair), "%s-%s", cmt_lower, fp_lower);
+    const char* colors[] = {"red", "green", "blue", "yellow", "white", "orange", NULL};
+    char comp_color[32] = {0};
+    for (int c = 0; colors[c]; ++c) {
+        if (strstr(cmt_can, colors[c])) {
+            strcpy(comp_color, colors[c]);
+            break;
+        }
+    }
 
-    // 1. Khớp tuyệt đối Value-Footprint (VD: 1k-0603, 10k-0805)
+    // 1. Nếu có màu (LED, etc.)
+    if (comp_color[0]) {
+        for (int slot = 1; slot <= 50; ++slot) {
+            if (g_feeder_matrix_c[slot].comment[0]) {
+                char f_can[128] = {0};
+                canonicalize_feeder_keywords_c(g_feeder_matrix_c[slot].comment, f_can, sizeof(f_can));
+                if (strstr(f_can, comp_color)) {
+                    if (comp_pkg[0]) {
+                        if (strstr(f_can, comp_pkg)) return slot;
+                    } else {
+                        return slot;
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Khớp tuyệt đối Value-Footprint
+    char full_pair[256] = {0};
+    snprintf(full_pair, sizeof(full_pair), "%s-%s", cmt_can, fp_can);
     for (int slot = 1; slot <= 50; ++slot) {
         if (g_feeder_matrix_c[slot].comment[0]) {
-            char f_lower[64] = {0};
-            strncpy(f_lower, g_feeder_matrix_c[slot].comment, sizeof(f_lower) - 1);
-            for (int i = 0; f_lower[i]; i++) f_lower[i] = (char)tolower(f_lower[i]);
+            char f_can[128] = {0};
+            canonicalize_feeder_keywords_c(g_feeder_matrix_c[slot].comment, f_can, sizeof(f_can));
+            if (strcmp(f_can, full_pair) == 0) return slot;
 
-            if (strcmp(f_lower, full_pair) == 0) return slot;
-
-            char* dash = strchr(f_lower, '-');
+            char* dash = strchr(f_can, '-');
             if (dash) {
                 *dash = '\0';
-                char* val_p = f_lower;
+                char* val_p = f_can;
                 char* fp_p = dash + 1;
-                if ((strcmp(val_p, cmt_lower) == 0 || (val_p[0] && strstr(cmt_lower, val_p)) || (cmt_lower[0] && strstr(val_p, cmt_lower))) &&
-                    (strcmp(fp_p, fp_lower) == 0 || (fp_p[0] && strstr(fp_lower, fp_p)) || (fp_lower[0] && strstr(fp_p, fp_lower)))) {
+                if ((strcmp(val_p, cmt_can) == 0 || (val_p[0] && strstr(cmt_can, val_p)) || (cmt_can[0] && strstr(val_p, cmt_can))) &&
+                    (strcmp(fp_p, fp_can) == 0 || (fp_p[0] && strstr(fp_can, fp_p)) || (fp_can[0] && strstr(fp_p, fp_can)))) {
                     return slot;
                 }
             }
         }
     }
 
-    // 2. Khớp chính xác Comment
+    // 3. Khớp chính xác Comment
     for (int slot = 1; slot <= 50; ++slot) {
         if (g_feeder_matrix_c[slot].comment[0]) {
-            char f_lower[64] = {0};
-            strncpy(f_lower, g_feeder_matrix_c[slot].comment, sizeof(f_lower) - 1);
-            for (int i = 0; f_lower[i]; i++) f_lower[i] = (char)tolower(f_lower[i]);
-            if (strcmp(f_lower, cmt_lower) == 0) return slot;
+            char f_can[128] = {0};
+            canonicalize_feeder_keywords_c(g_feeder_matrix_c[slot].comment, f_can, sizeof(f_can));
+            if (strcmp(f_can, cmt_can) == 0) return slot;
         }
     }
 
-    // 3. Khớp mờ / chứa Comment
+    // 4. Khớp mờ / chứa Comment
     for (int slot = 1; slot <= 50; ++slot) {
         if (g_feeder_matrix_c[slot].comment[0]) {
-            char f_lower[64] = {0};
-            strncpy(f_lower, g_feeder_matrix_c[slot].comment, sizeof(f_lower) - 1);
-            for (int i = 0; f_lower[i]; i++) f_lower[i] = (char)tolower(f_lower[i]);
-            if (strstr(cmt_lower, f_lower) || strstr(f_lower, cmt_lower)) return slot;
+            char f_can[128] = {0};
+            canonicalize_feeder_keywords_c(g_feeder_matrix_c[slot].comment, f_can, sizeof(f_can));
+            if (strstr(cmt_can, f_can) || strstr(f_can, cmt_can)) return slot;
         }
     }
+
     return 0; // Trả về 0 nếu chưa có cấu hình khay Feeder phù hợp
 }
 

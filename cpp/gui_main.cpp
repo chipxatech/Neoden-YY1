@@ -251,46 +251,128 @@ std::wstring normalizeComment(const std::wstring& cmt) {
     if (cl == L"nguon") return L"POWER_HDR";
     if (cl == L"bomkhi") return L"AIR_PUMP";
     if (cl == L"vankhi") return L"AIR_VALVE";
-    if (cl.find(L"led 0603") != std::wstring::npos || cl == L"led") return L"LED_0603";
     if (cl.find(L"sdcard") != std::wstring::npos || cl.find(L"tf3") != std::wstring::npos) return L"MICRO_SD_TF3";
     if (cl.find(L"pressure sensor") != std::wstring::npos) return L"PRESSURE_SENSOR";
     return cmt;
 }
 
+static std::wstring removeDiacriticsCpp(const std::wstring& str) {
+    std::wstring s = toLower(str);
+    for (size_t i = 0; i < s.length(); ++i) {
+        wchar_t c = s[i];
+        if ((c >= 0x00E0 && c <= 0x00E5) || c == 0x0103 || c == 0x1EA1 || c == 0x1EA3 || c == 0x1EA5 || c == 0x1EA7 || c == 0x1EA9 || c == 0x1EAB || c == 0x1EAD || c == 0x1EAF || c == 0x1EB1 || c == 0x1EB3 || c == 0x1EB5 || c == 0x1EB7 || c == 0x00E2) s[i] = L'a';
+        else if ((c >= 0x00E8 && c <= 0x00EB) || c == 0x00EA || c == 0x1EB9 || c == 0x1EBB || c == 0x1EBD || c == 0x1EBF || c == 0x1EC1 || c == 0x1EC3 || c == 0x1EC5 || c == 0x1EC7) s[i] = L'e';
+        else if ((c >= 0x00EC && c <= 0x00EF) || c == 0x1EC9 || c == 0x1ECB) s[i] = L'i';
+        else if ((c >= 0x00F2 && c <= 0x00F6) || c == 0x00F4 || c == 0x01A1 || c == 0x1ECD || c == 0x1ECF || c == 0x1ED1 || c == 0x1ED3 || c == 0x1ED5 || c == 0x1ED7 || c == 0x1ED9 || c == 0x1EDB || c == 0x1EDD || c == 0x1EDF || c == 0x1EE1 || c == 0x1EE3) s[i] = L'o';
+        else if ((c >= 0x00F9 && c <= 0x00FC) || c == 0x01B0 || c == 0x1EE5 || c == 0x1EE7 || c == 0x1EE9 || c == 0x1EEB || c == 0x1EED || c == 0x1EEF || c == 0x1EF1) s[i] = L'u';
+        else if (c == 0x00FD || c == 0x1EF3 || c == 0x1EF5 || c == 0x1EF7 || c == 0x1EF9) s[i] = L'y';
+        else if (c == 0x0111 || c == 0x0110) s[i] = L'd';
+    }
+    return s;
+}
+
+static std::wstring canonicalizeFeederKeywordsCpp(const std::wstring& input) {
+    std::wstring s = removeDiacriticsCpp(input);
+    size_t pos = 0;
+    while ((pos = s.find(L"xanh la", pos)) != std::wstring::npos) { s.replace(pos, 7, L"green"); pos += 5; }
+    pos = 0;
+    while ((pos = s.find(L"xanh cay", pos)) != std::wstring::npos) { s.replace(pos, 8, L"green"); pos += 5; }
+    pos = 0;
+    while ((pos = s.find(L"xanh duong", pos)) != std::wstring::npos) { s.replace(pos, 10, L"blue"); pos += 4; }
+    pos = 0;
+    while ((pos = s.find(L"xanh bien", pos)) != std::wstring::npos) { s.replace(pos, 9, L"blue"); pos += 4; }
+    pos = 0;
+    while ((pos = s.find(L"xanh", pos)) != std::wstring::npos) { s.replace(pos, 4, L"green"); pos += 5; }
+    pos = 0;
+    while ((pos = s.find(L"do", pos)) != std::wstring::npos) {
+        bool before_ok = (pos == 0 || !iswalnum(s[pos - 1]));
+        bool after_ok = (pos + 2 >= s.length() || !iswalnum(s[pos + 2]));
+        if (before_ok && after_ok) { s.replace(pos, 2, L"red"); pos += 3; }
+        else pos += 2;
+    }
+    pos = 0;
+    while ((pos = s.find(L"vang", pos)) != std::wstring::npos) { s.replace(pos, 4, L"yellow"); pos += 6; }
+    pos = 0;
+    while ((pos = s.find(L"trang", pos)) != std::wstring::npos) { s.replace(pos, 5, L"white"); pos += 5; }
+    pos = 0;
+    while ((pos = s.find(L"cam", pos)) != std::wstring::npos) {
+        bool before_ok = (pos == 0 || !iswalnum(s[pos - 1]));
+        bool after_ok = (pos + 3 >= s.length() || !iswalnum(s[pos + 3]));
+        if (before_ok && after_ok) { s.replace(pos, 3, L"orange"); pos += 6; }
+        else pos += 3;
+    }
+    return s;
+}
+
 int matchFeederSlot(const std::wstring& comment, const std::wstring& footprint) {
-    std::wstring cmt = toLower(comment);
-    std::wstring fp = toLower(footprint);
-    if (cmt.empty() && fp.empty()) return 0;
+    if (comment.empty() && footprint.empty()) return 0;
 
-    std::wstring full_pair = cmt + L"-" + fp;
+    std::wstring cmt_can = canonicalizeFeederKeywordsCpp(comment);
+    std::wstring fp_can = canonicalizeFeederKeywordsCpp(footprint);
 
-    // 1. Khớp tuyệt đối cả Comment & Footprint dạng "Value-Footprint" (VD: 1K-0603, 10K-0805)
+    std::vector<std::wstring> packages = {L"0402", L"0603", L"0805", L"1206", L"1210", L"sod-123", L"sod-323", L"sot-23", L"sop-8", L"sop-16", L"sma", L"smb", L"smc"};
+    std::wstring comp_pkg = L"";
+    for (const auto& pkg : packages) {
+        if (cmt_can.find(pkg) != std::wstring::npos || fp_can.find(pkg) != std::wstring::npos) {
+            comp_pkg = pkg;
+            break;
+        }
+    }
+
+    std::vector<std::wstring> colors = {L"red", L"green", L"blue", L"yellow", L"white", L"orange"};
+    std::wstring comp_color = L"";
+    for (const auto& clr : colors) {
+        if (cmt_can.find(clr) != std::wstring::npos) {
+            comp_color = clr;
+            break;
+        }
+    }
+
+    // 1. Nếu là LED hoặc linh kiện có màu và kích thước (VD: led do 0603 -> red + 0603 -> slot 34)
+    if (!comp_color.empty()) {
+        for (const auto& [slot, cfg] : g_feeder_matrix) {
+            if (cfg.comment.empty()) continue;
+            std::wstring f_can = canonicalizeFeederKeywordsCpp(cfg.comment);
+            if (f_can.find(comp_color) != std::wstring::npos) {
+                if (!comp_pkg.empty()) {
+                    if (f_can.find(comp_pkg) != std::wstring::npos) return slot;
+                } else {
+                    return slot;
+                }
+            }
+        }
+    }
+
+    // 2. Khớp tuyệt đối cả Comment & Footprint dạng "Value-Footprint" (VD: 1K-0603, 10K-0805)
+    std::wstring full_pair = cmt_can + L"-" + fp_can;
     for (const auto& [slot, cfg] : g_feeder_matrix) {
         if (cfg.comment.empty()) continue;
-        std::wstring raw = toLower(cfg.comment);
-        if (raw == full_pair) return slot;
+        std::wstring f_can = canonicalizeFeederKeywordsCpp(cfg.comment);
+        if (f_can == full_pair) return slot;
 
-        size_t dash = raw.find(L"-");
+        size_t dash = f_can.find(L"-");
         if (dash != std::wstring::npos) {
-            std::wstring val_p = raw.substr(0, dash);
-            std::wstring fp_p = raw.substr(dash + 1);
-            if ((val_p == cmt || (!val_p.empty() && cmt.find(val_p) != std::wstring::npos) || (!cmt.empty() && val_p.find(cmt) != std::wstring::npos)) &&
-                (fp_p == fp || (!fp_p.empty() && fp.find(fp_p) != std::wstring::npos) || (!fp.empty() && fp_p.find(fp) != std::wstring::npos))) {
+            std::wstring val_p = f_can.substr(0, dash);
+            std::wstring fp_p = f_can.substr(dash + 1);
+            if ((val_p == cmt_can || (!val_p.empty() && cmt_can.find(val_p) != std::wstring::npos) || (!cmt_can.empty() && val_p.find(cmt_can) != std::wstring::npos)) &&
+                (fp_p == fp_can || (!fp_p.empty() && fp_can.find(fp_p) != std::wstring::npos) || (!fp_can.empty() && fp_p.find(fp_can) != std::wstring::npos))) {
                 return slot;
             }
         }
     }
 
-    // 2. Khớp chính xác Comment
-    for (const auto& [slot, cfg] : g_feeder_matrix) {
-        if (!cfg.comment.empty() && toLower(cfg.comment) == cmt) return slot;
-    }
-
-    // 3. Khớp mờ / chứa Comment
+    // 3. Khớp chính xác Comment
     for (const auto& [slot, cfg] : g_feeder_matrix) {
         if (cfg.comment.empty()) continue;
-        std::wstring raw = toLower(cfg.comment);
-        if (raw.find(cmt) != std::wstring::npos || cmt.find(raw) != std::wstring::npos) return slot;
+        std::wstring f_can = canonicalizeFeederKeywordsCpp(cfg.comment);
+        if (f_can == cmt_can) return slot;
+    }
+
+    // 4. Khớp mờ / chứa Comment
+    for (const auto& [slot, cfg] : g_feeder_matrix) {
+        if (cfg.comment.empty()) continue;
+        std::wstring f_can = canonicalizeFeederKeywordsCpp(cfg.comment);
+        if (f_can.find(cmt_can) != std::wstring::npos || cmt_can.find(f_can) != std::wstring::npos) return slot;
     }
     return 0; // Trả về 0 nếu chưa có cấu hình khay Feeder phù hợp
 }
