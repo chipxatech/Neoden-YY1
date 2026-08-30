@@ -627,121 +627,94 @@ void openFeederMatrixDialog(HWND parent) {
     SendMessageW(hBtnSave, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 }
 
-// Edit Row Dialog
-static int g_edit_target_index = -1;
-static HWND g_hEditDes, g_hEditCmt, g_hEditFp, g_hEditX, g_hEditY, g_hEditRot;
-static HWND g_hEditHead, g_hEditFeeder, g_hEditSpeed, g_hEditPick, g_hEditPlace, g_hEditMode, g_hEditSkip;
+// In-Place Cell Editing trực tiếp trên từng ô
+static WNDPROC g_oldEditProc = NULL;
+static int g_inPlaceItem = -1;
+static int g_inPlaceSubItem = -1;
+static HWND g_hInPlaceEdit = NULL;
 
-LRESULT CALLBACK EditCompDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-    switch (message) {
-    case WM_COMMAND: {
-        int id = LOWORD(wParam);
-        if (id == 3099) { // Save
-            auto& list = g_showing_top ? g_top_components : g_bot_components;
-            if (g_edit_target_index >= 0 && g_edit_target_index < (int)list.size()) {
-                auto& c = list[g_edit_target_index];
-                wchar_t buf[256];
+void commitInPlaceEdit(bool save) {
+    if (!g_hInPlaceEdit) return;
+    HWND hEdit = g_hInPlaceEdit;
+    g_hInPlaceEdit = NULL;
+    int item = g_inPlaceItem;
+    int subItem = g_inPlaceSubItem;
+    g_inPlaceItem = -1;
+    g_inPlaceSubItem = -1;
 
-                GetWindowTextW(g_hEditDes, buf, 256); c.designator = buf;
-                GetWindowTextW(g_hEditCmt, buf, 256); c.comment = buf;
-                GetWindowTextW(g_hEditFp, buf, 256); c.footprint = buf;
-                GetWindowTextW(g_hEditX, buf, 256); c.mid_x = _wtof(buf);
-                GetWindowTextW(g_hEditY, buf, 256); c.mid_y = _wtof(buf);
-                GetWindowTextW(g_hEditRot, buf, 256); c.rotation = _wtof(buf);
-                GetWindowTextW(g_hEditHead, buf, 256); c.head = _wtoi(buf);
-                GetWindowTextW(g_hEditFeeder, buf, 256); c.feeder_no = _wtoi(buf);
-                GetWindowTextW(g_hEditSpeed, buf, 256); c.mount_speed = _wtoi(buf);
-                GetWindowTextW(g_hEditPick, buf, 256); c.pick_height = _wtof(buf);
-                GetWindowTextW(g_hEditPlace, buf, 256); c.place_height = _wtof(buf);
-                GetWindowTextW(g_hEditMode, buf, 256); c.mode = _wtoi(buf);
-                GetWindowTextW(g_hEditSkip, buf, 256); c.skip = _wtoi(buf);
-
-                refreshListView();
+    if (save) {
+        wchar_t buf[256] = {0};
+        GetWindowTextW(hEdit, buf, 256);
+        std::wstring s = buf;
+        auto& list = g_showing_top ? g_top_components : g_bot_components;
+        if (item >= 0 && item < (int)list.size()) {
+            auto& c = list[item];
+            switch (subItem) {
+                case 1: c.designator = s; break;
+                case 2: c.comment = s; break;
+                case 3: c.footprint = s; break;
+                case 4: try { c.mid_x = std::stod(s); } catch(...) {} break;
+                case 5: try { c.mid_y = std::stod(s); } catch(...) {} break;
+                case 6: try { c.rotation = std::stod(s); } catch(...) {} break;
+                case 7: try { c.head = std::stoi(s); } catch(...) {} break;
+                case 8: try { c.feeder_no = std::stoi(s); } catch(...) {} break;
+                case 9: try { c.mount_speed = std::stoi(s); } catch(...) {} break;
+                case 10: try { c.pick_height = std::stod(s); } catch(...) {} break;
+                case 11: try { c.place_height = std::stod(s); } catch(...) {} break;
+                case 12: try { c.mode = std::stoi(s); } catch(...) {} break;
             }
-            DestroyWindow(hWnd);
-            break;
-        } else if (id == IDCANCEL || id == 3098) {
-            DestroyWindow(hWnd);
-            break;
         }
-        break;
+        refreshListView();
     }
-    case WM_CLOSE:
-        DestroyWindow(hWnd);
-        break;
-    default:
-        return DefWindowProcW(hWnd, message, wParam, lParam);
-    }
-    return 0;
+    DestroyWindow(hEdit);
 }
 
-void editSelectedRow(HWND parent, int itemIndex = -1) {
-    auto& list = g_showing_top ? g_top_components : g_bot_components;
-    int sel = itemIndex;
-    if (sel < 0) {
-        sel = ListView_GetNextItem(g_hListView, -1, LVNI_SELECTED);
+LRESULT CALLBACK InPlaceEditProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    switch (message) {
+    case WM_KILLFOCUS:
+        commitInPlaceEdit(true);
+        return 0;
+    case WM_KEYDOWN:
+        if (wParam == VK_RETURN) {
+            commitInPlaceEdit(true);
+            return 0;
+        } else if (wParam == VK_ESCAPE) {
+            commitInPlaceEdit(false);
+            return 0;
+        }
+        break;
+    case WM_CHAR:
+        if (wParam == VK_RETURN || wParam == VK_ESCAPE) return 0;
+        break;
     }
-    if (sel < 0 || sel >= (int)list.size()) {
-        MessageBoxW(parent, L"Vui lòng chọn một dòng linh kiện để sửa!", L"Thông Báo", MB_ICONWARNING);
-        return;
-    }
+    return CallWindowProc(g_oldEditProc, hWnd, message, wParam, lParam);
+}
 
-    g_edit_target_index = sel;
-    const auto& c = list[sel];
+void startInPlaceEdit(int item, int subItem) {
+    if (item < 0 || subItem < 1 || subItem > 12) return;
+    commitInPlaceEdit(true);
 
-    RECT pr;
-    GetWindowRect(parent, &pr);
-    int dlgW = 540, dlgH = 540;
-    int dlgX = pr.left + (pr.right - pr.left - dlgW) / 2;
-    int dlgY = pr.top + (pr.bottom - pr.top - dlgH) / 2;
+    RECT rc;
+    ListView_GetSubItemRect(g_hListView, item, subItem, LVIR_BOUNDS, &rc);
 
-    wchar_t titleBuf[128];
-    swprintf(titleBuf, 128, L"✏️ Chỉnh Sửa Linh Kiện [%s] - NeoDen YY1", c.designator.c_str());
+    wchar_t cur[256] = {0};
+    ListView_GetItemText(g_hListView, item, subItem, cur, 256);
 
-    HWND hDlg = CreateWindowExW(WS_EX_DLGMODALFRAME, L"#32770", titleBuf,
-                               WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-                               dlgX, dlgY, dlgW, dlgH, parent, NULL, g_hInst, NULL);
-    if (!hDlg) return;
+    g_inPlaceItem = item;
+    g_inPlaceSubItem = subItem;
 
-    SetWindowLongPtr(hDlg, DWLP_DLGPROC, (LONG_PTR)EditCompDlgProc);
+    g_hInPlaceEdit = CreateWindowExW(
+        WS_EX_CLIENTEDGE, L"EDIT", cur,
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_LEFT,
+        rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top + 1,
+        g_hListView, (HMENU)9999, g_hInst, NULL
+    );
+    if (!g_hInPlaceEdit) return;
 
-    HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" 📍 Thông Số Vị Trí & Tên Linh Kiện ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 15, 10, 245, 430, hDlg, NULL, g_hInst, NULL);
-    SendMessageW(hGrp1, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
-
-    HWND hGrp2 = CreateWindowExW(0, L"BUTTON", L" ⚙️ Thông Số Máy Gắp NeoDen YY1 ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 270, 10, 240, 430, hDlg, NULL, g_hInst, NULL);
-    SendMessageW(hGrp2, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
-
-    auto makeField = [&](HWND hParent, const wchar_t* label, int x, int y, int w, const wchar_t* val, HMENU id) -> HWND {
-        HWND hLbl = CreateWindowExW(0, L"STATIC", label, WS_CHILD | WS_VISIBLE, x, y, w, 18, hParent, NULL, g_hInst, NULL);
-        SendMessageW(hLbl, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
-        HWND hEd = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", val, WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, x, y + 20, w, 24, hParent, id, g_hInst, NULL);
-        SendMessageW(hEd, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
-        return hEd;
-    };
-
-    wchar_t b[64];
-    // Cột trái
-    g_hEditDes = makeField(hDlg, L"Designator (Tên LK):", 30, 35, 215, c.designator.c_str(), (HMENU)3001);
-    g_hEditCmt = makeField(hDlg, L"Comment (Trị số):", 30, 90, 215, c.comment.c_str(), (HMENU)3002);
-    g_hEditFp = makeField(hDlg, L"Footprint (Đóng gói):", 30, 145, 215, c.footprint.c_str(), (HMENU)3003);
-    swprintf(b, 64, L"%.2f", c.mid_x); g_hEditX = makeField(hDlg, L"Mid X (mm):", 30, 200, 215, b, (HMENU)3004);
-    swprintf(b, 64, L"%.2f", c.mid_y); g_hEditY = makeField(hDlg, L"Mid Y (mm):", 30, 255, 215, b, (HMENU)3005);
-    swprintf(b, 64, L"%.2f", c.rotation); g_hEditRot = makeField(hDlg, L"Rotation (Góc quay °):", 30, 310, 215, b, (HMENU)3006);
-    swprintf(b, 64, L"%d", c.head); g_hEditHead = makeField(hDlg, L"Head (Đầu gắp 0/1/2):", 30, 365, 215, b, (HMENU)3007);
-
-    // Cột phải
-    swprintf(b, 64, L"%d", c.feeder_no); g_hEditFeeder = makeField(hDlg, L"FeederNo (Khay 1..50):", 285, 35, 210, b, (HMENU)3008);
-    swprintf(b, 64, L"%d", c.mount_speed); g_hEditSpeed = makeField(hDlg, L"Mount Speed (%):", 285, 90, 210, b, (HMENU)3009);
-    swprintf(b, 64, L"%.2f", c.pick_height); g_hEditPick = makeField(hDlg, L"Pick Height (mm):", 285, 145, 210, b, (HMENU)3010);
-    swprintf(b, 64, L"%.2f", c.place_height); g_hEditPlace = makeField(hDlg, L"Place Height (mm):", 285, 200, 210, b, (HMENU)3011);
-    swprintf(b, 64, L"%d", c.mode); g_hEditMode = makeField(hDlg, L"Mode (Chế độ gắp):", 285, 255, 210, b, (HMENU)3012);
-    swprintf(b, 64, L"%d", c.skip); g_hEditSkip = makeField(hDlg, L"Skip (0=Bình thường, 1=Bỏ qua):", 285, 310, 210, b, (HMENU)3013);
-
-    HWND hBtnSave = CreateWindowExW(0, L"BUTTON", L"💾 LƯU THAY ĐỔI", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 230, 455, 170, 36, hDlg, (HMENU)3099, g_hInst, NULL);
-    SendMessageW(hBtnSave, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
-
-    HWND hBtnCancel = CreateWindowExW(0, L"BUTTON", L"Hủy", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 415, 455, 90, 36, hDlg, (HMENU)3098, g_hInst, NULL);
-    SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
+    SendMessageW(g_hInPlaceEdit, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
+    g_oldEditProc = (WNDPROC)SetWindowLongPtr(g_hInPlaceEdit, GWLP_WNDPROC, (LONG_PTR)InPlaceEditProc);
+    SetFocus(g_hInPlaceEdit);
+    SendMessageW(g_hInPlaceEdit, EM_SETSEL, 0, -1);
 }
 
 // Splash Window Procedure
@@ -1015,8 +988,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             refreshListView();
                             ListView_SetItemState(g_hListView, -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
                         }
-                    } else {
-                        editSelectedRow(hWnd, pia->iItem);
+                    } else if (pia->iSubItem >= 1 && pia->iSubItem <= 12) {
+                        startInPlaceEdit(pia->iItem, pia->iSubItem);
                     }
                 }
             }
@@ -1071,7 +1044,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             break;
         }
         case 403: { // Sửa Feeder
-            editSelectedRow(hWnd);
+            int sel = ListView_GetNextItem(g_hListView, -1, LVNI_SELECTED);
+            if (sel >= 0) {
+                startInPlaceEdit(sel, 8);
+            }
             break;
         }
         }

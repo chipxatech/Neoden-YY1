@@ -606,20 +606,73 @@ class NeoDenYY1App:
 
         def on_table_double_click(event):
             region = tree.identify_region(event.x, event.y)
-            if region == "cell":
+            if region in ("cell", "tree"):
                 col = tree.identify_column(event.x)
                 item_id = tree.identify_row(event.y)
-                if col == "#14":
-                    if item_id:
-                        idx = int(item_id.split("_")[1])
-                        _, comp_list, _ = self.get_active_tree_and_list()
-                        if idx < len(comp_list):
-                            comp_list[idx]["skip"] = 0 if comp_list[idx].get("skip", 0) == 1 else 1
-                            self.refresh_tables()
-                else:
-                    if item_id:
-                        tree.selection_set(item_id)
-                        self.edit_selected_row()
+                if not item_id:
+                    return
+                try:
+                    col_idx = int(col.replace("#", "")) - 1
+                except Exception:
+                    return
+                if col_idx == 0:
+                    return
+                try:
+                    idx = int(item_id.split("_")[1])
+                except Exception:
+                    return
+                _, comp_list, _ = self.get_active_tree_and_list()
+                if idx >= len(comp_list):
+                    return
+                if col_idx == 13:
+                    comp_list[idx]["skip"] = 0 if comp_list[idx].get("skip", 0) == 1 else 1
+                    self.refresh_tables()
+                    return
+
+                bbox = tree.bbox(item_id, col)
+                if not bbox:
+                    return
+                x, y, w, h = bbox
+                key_map = {
+                    1: "designator", 2: "comment", 3: "footprint",
+                    4: "mid_x", 5: "mid_y", 6: "rotation",
+                    7: "head", 8: "feeder_no", 9: "mount_speed",
+                    10: "pick_height", 11: "place_height", 12: "mode"
+                }
+                key = key_map.get(col_idx)
+                if not key:
+                    return
+
+                cur_val = str(comp_list[idx].get(key, ""))
+                entry = tk.Entry(tree, font=("Segoe UI", 9), bg="#1E293B", fg="#FFFFFF", insertbackground="white", bd=1, relief="solid")
+                entry.insert(0, cur_val)
+                entry.select_range(0, tk.END)
+                entry.place(x=x, y=y, width=w, height=h)
+                entry.focus_set()
+
+                def save_cell(e=None):
+                    if not entry.winfo_exists():
+                        return
+                    new_val = entry.get().strip()
+                    try:
+                        if key in ("mid_x", "mid_y", "rotation", "pick_height", "place_height"):
+                            comp_list[idx][key] = float(new_val)
+                        elif key in ("head", "feeder_no", "mount_speed", "mode"):
+                            comp_list[idx][key] = int(new_val)
+                        else:
+                            comp_list[idx][key] = new_val
+                    except Exception:
+                        comp_list[idx][key] = new_val
+                    entry.destroy()
+                    self.refresh_tables()
+
+                def cancel_cell(e=None):
+                    if entry.winfo_exists():
+                        entry.destroy()
+
+                entry.bind("<Return>", save_cell)
+                entry.bind("<FocusOut>", save_cell)
+                entry.bind("<Escape>", cancel_cell)
                             
         tree.bind("<ButtonRelease-1>", on_table_click)
         tree.bind("<Double-1>", on_table_double_click)

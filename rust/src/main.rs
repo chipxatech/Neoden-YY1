@@ -331,6 +331,8 @@ unsafe extern "system" {
     fn GetWindowRect(hWnd: HWND, lpRect: *mut RECT) -> i32;
     fn SetWindowLongPtrW(hWnd: HWND, nIndex: i32, dwNewLong: isize) -> isize;
     fn GetModuleHandleW(lpModuleName: *const u16) -> HINSTANCE;
+    fn SetFocus(hWnd: HWND) -> HWND;
+    fn CallWindowProcW(lpPrevWndFunc: isize, hWnd: HWND, Msg: u32, wParam: usize, lParam: isize) -> isize;
 }
 
 fn to_wstr(s: &str) -> Vec<u16> {
@@ -835,135 +837,112 @@ unsafe extern "system" fn splash_proc(hwnd: HWND, msg: u32, wparam: usize, lpara
     }
 }
 
-// Edit Row Dialog trong Rust
-static EDIT_TARGET: Mutex<i32> = Mutex::new(-1);
-static EDIT_FIELDS: Mutex<[usize; 13]> = Mutex::new([0; 13]);
+// In-Place Cell Editing trực tiếp trên từng ô trong Rust
+static INPLACE_EDIT: Mutex<(usize, i32, i32)> = Mutex::new((0, -1, -1));
+static mut OLD_EDIT_PROC: isize = 0;
 
-unsafe extern "system" fn edit_dlg_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize {
-    match msg {
-        0x0111 => { // WM_COMMAND
-            let id = (wparam & 0xFFFF) as u32;
-            if id == 3099 { // Save
-                let sel = *EDIT_TARGET.lock().unwrap();
-                let hwnds = *EDIT_FIELDS.lock().unwrap();
-                let get_txt = |h_val: usize| -> String {
-                    let mut buf = [0u16; 256];
-                    GetWindowTextW(h_val as HWND, buf.as_mut_ptr(), 256);
-                    from_wstr(buf.as_ptr())
-                };
+unsafe fn commit_in_place_edit(save: bool) {
+    let (h_val, item, sub_item) = {
+        let mut ed = INPLACE_EDIT.lock().unwrap();
+        let res = *ed;
+        *ed = (0, -1, -1);
+        res
+    };
 
-                let mut state = STATE.lock().unwrap();
-                let showing_top = state.showing_top;
-                let list = if showing_top { &mut state.top_components } else { &mut state.bot_components };
-                if sel >= 0 && (sel as usize) < list.len() {
-                    let c = &mut list[sel as usize];
-                    c.designator = get_txt(hwnds[0]);
-                    c.comment = get_txt(hwnds[1]);
-                    c.footprint = get_txt(hwnds[2]);
-                    c.mid_x = get_txt(hwnds[3]).parse().unwrap_or(c.mid_x);
-                    c.mid_y = get_txt(hwnds[4]).parse().unwrap_or(c.mid_y);
-                    c.rotation = get_txt(hwnds[5]).parse().unwrap_or(c.rotation);
-                    c.head = get_txt(hwnds[6]).parse().unwrap_or(c.head);
-                    c.feeder_no = get_txt(hwnds[7]).parse().unwrap_or(c.feeder_no);
-                    c.mount_speed = get_txt(hwnds[8]).parse().unwrap_or(c.mount_speed);
-                    c.pick_height = get_txt(hwnds[9]).parse().unwrap_or(c.pick_height);
-                    c.place_height = get_txt(hwnds[10]).parse().unwrap_or(c.place_height);
-                    c.mode = get_txt(hwnds[11]).parse().unwrap_or(c.mode);
-                    c.skip = get_txt(hwnds[12]).parse().unwrap_or(c.skip);
-                }
-                drop(state);
-                refresh_list_view();
-                DestroyWindow(hwnd);
-            } else if id == 2 || id == 3098 { // Cancel
-                DestroyWindow(hwnd);
+    let h_edit = h_val as HWND;
+    if h_edit.is_null() { return; }
+
+    if save {
+        let mut buf = [0u16; 256];
+        GetWindowTextW(h_edit, buf.as_mut_ptr(), 256);
+        let s = from_wstr(buf.as_ptr());
+
+        let mut state = STATE.lock().unwrap();
+        let showing_top = state.showing_top;
+        let list = if showing_top { &mut state.top_components } else { &mut state.bot_components };
+        if item >= 0 && (item as usize) < list.len() {
+            let c = &mut list[item as usize];
+            match sub_item {
+                1 => c.designator = s,
+                2 => c.comment = s,
+                3 => c.footprint = s,
+                4 => if let Ok(v) = s.parse() { c.mid_x = v; },
+                5 => if let Ok(v) = s.parse() { c.mid_y = v; },
+                6 => if let Ok(v) = s.parse() { c.rotation = v; },
+                7 => if let Ok(v) = s.parse() { c.head = v; },
+                8 => if let Ok(v) = s.parse() { c.feeder_no = v; },
+                9 => if let Ok(v) = s.parse() { c.mount_speed = v; },
+                10 => if let Ok(v) = s.parse() { c.pick_height = v; },
+                11 => if let Ok(v) = s.parse() { c.place_height = v; },
+                12 => if let Ok(v) = s.parse() { c.mode = v; },
+                _ => {}
             }
+        }
+        drop(state);
+        refresh_list_view();
+    }
+    DestroyWindow(h_edit);
+}
+
+unsafe extern "system" fn in_place_edit_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize {
+    match msg {
+        0x0008 => { // WM_KILLFOCUS
+            commit_in_place_edit(true);
             0
         }
-        0x0010 => { // WM_CLOSE
-            DestroyWindow(hwnd);
-            0
+        0x0100 => { // WM_KEYDOWN
+            if wparam == 13 { // VK_RETURN
+                commit_in_place_edit(true);
+                return 0;
+            } else if wparam == 27 { // VK_ESCAPE
+                commit_in_place_edit(false);
+                return 0;
+            }
+            CallWindowProcW(OLD_EDIT_PROC, hwnd, msg, wparam, lparam)
         }
-        _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+        0x0102 => { // WM_CHAR
+            if wparam == 13 || wparam == 27 { return 0; }
+            CallWindowProcW(OLD_EDIT_PROC, hwnd, msg, wparam, lparam)
+        }
+        _ => CallWindowProcW(OLD_EDIT_PROC, hwnd, msg, wparam, lparam),
     }
 }
 
-fn edit_selected_row(parent: HWND, item_idx: i32) {
+fn start_in_place_edit(hwnd_lv: HWND, item: i32, sub_item: i32) {
+    if item < 0 || sub_item < 1 || sub_item > 12 { return; }
     unsafe {
-        let c_opt = {
-            let state = STATE.lock().unwrap();
-            let list = if state.showing_top { &state.top_components } else { &state.bot_components };
-            if item_idx >= 0 && (item_idx as usize) < list.len() {
-                Some(list[item_idx as usize].clone())
-            } else {
-                None
-            }
-        };
+        commit_in_place_edit(true);
 
-        let c = match c_opt {
-            Some(comp) => comp,
-            None => return,
-        };
+        let mut rc: RECT = std::mem::zeroed();
+        rc.top = sub_item;
+        SendMessageW(hwnd_lv, 0x1038 /* LVM_GETSUBITEMRECT */, item as usize, &mut rc as *mut _ as isize);
 
-        *EDIT_TARGET.lock().unwrap() = item_idx;
+        let mut cur_buf = [0u16; 256];
+        let mut lvi: LVITEMW = std::mem::zeroed();
+        lvi.i_sub_item = sub_item;
+        lvi.cch_text_max = 256;
+        lvi.psz_text = cur_buf.as_mut_ptr();
+        SendMessageW(hwnd_lv, 0x1073 /* LVM_GETITEMTEXTW */, item as usize, &mut lvi as *mut _ as isize);
+
         let hinst = GetModuleHandleW(ptr::null());
-
-        let mut pr: RECT = std::mem::zeroed();
-        GetWindowRect(parent, &mut pr);
-        let dlg_w = 540;
-        let dlg_h = 540;
-        let dlg_x = pr.left + (pr.right - pr.left - dlg_w) / 2;
-        let dlg_y = pr.top + (pr.bottom - pr.top - dlg_h) / 2;
-
-        let title = to_wstr(&format!("✏️ Chỉnh Sửa Linh Kiện [{}] - NeoDen YY1", c.designator));
-        let h_dlg = CreateWindowExW(
-            0x00000001, to_wstr("#32770").as_ptr(), title.as_ptr(),
-            0x80000000 | 0x00C00000 | 0x00080000 | 0x10000000,
-            dlg_x, dlg_y, dlg_w, dlg_h, parent, ptr::null_mut(), hinst, ptr::null_mut()
+        let h_edit = CreateWindowExW(
+            0x00000200, to_wstr("EDIT").as_ptr(), cur_buf.as_ptr(),
+            0x50000080 | 0x00000000,
+            rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top + 1,
+            hwnd_lv, 9999 as *mut _, hinst, ptr::null_mut()
         );
-        if h_dlg.is_null() { return; }
+        if h_edit.is_null() { return; }
 
-        SetWindowLongPtrW(h_dlg, -4 /* DWLP_DLGPROC */, edit_dlg_proc as usize as isize);
-
-        let font_bold = CreateFontW(15, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
-        let font_normal = CreateFontW(15, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
-
-        let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📍 Thông Số Vị Trí & Tên Linh Kiện ").as_ptr(), 0x50000007, 15, 10, 245, 430, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
-        SendMessageW(grp1, 0x0030, font_bold as usize, 1);
-
-        let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" ⚙️ Thông Số Máy Gắp NeoDen YY1 ").as_ptr(), 0x50000007, 270, 10, 240, 430, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
-        SendMessageW(grp2, 0x0030, font_bold as usize, 1);
-
-        let make_field = |label: &str, x: i32, y: i32, w: i32, val: &str, id: u32| -> usize {
-            let h_lbl = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr(label).as_ptr(), 0x50000000, x, y, w, 18, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
-            SendMessageW(h_lbl, 0x0030, font_normal as usize, 1);
-            let h_ed = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr(val).as_ptr(), 0x50000080, x, y + 20, w, 24, h_dlg, id as *mut _, hinst, ptr::null_mut());
-            SendMessageW(h_ed, 0x0030, font_normal as usize, 1);
-            h_ed as usize
+        let font = {
+            let state = STATE.lock().unwrap();
+            state.font_main_sub
         };
+        SendMessageW(h_edit, 0x0030, font as usize, 1);
+        OLD_EDIT_PROC = SetWindowLongPtrW(h_edit, -4 /* GWLP_WNDPROC */, in_place_edit_proc as *const () as usize as isize);
+        SetFocus(h_edit);
+        SendMessageW(h_edit, 0x00B1 /* EM_SETSEL */, 0, -1);
 
-        let mut hwnds = [0usize; 13];
-        hwnds[0] = make_field("Designator (Tên LK):", 30, 35, 215, &c.designator, 3001);
-        hwnds[1] = make_field("Comment (Trị số):", 30, 90, 215, &c.comment, 3002);
-        hwnds[2] = make_field("Footprint (Đóng gói):", 30, 145, 215, &c.footprint, 3003);
-        hwnds[3] = make_field("Mid X (mm):", 30, 200, 215, &format!("{:.2}", c.mid_x), 3004);
-        hwnds[4] = make_field("Mid Y (mm):", 30, 255, 215, &format!("{:.2}", c.mid_y), 3005);
-        hwnds[5] = make_field("Rotation (Góc quay °):", 30, 310, 215, &format!("{:.2}", c.rotation), 3006);
-        hwnds[6] = make_field("Head (Đầu gắp 0/1/2):", 30, 365, 215, &format!("{}", c.head), 3007);
-
-        hwnds[7] = make_field("FeederNo (Khay 1..50):", 285, 35, 210, &format!("{}", c.feeder_no), 3008);
-        hwnds[8] = make_field("Mount Speed (%):", 285, 90, 210, &format!("{}", c.mount_speed), 3009);
-        hwnds[9] = make_field("Pick Height (mm):", 285, 145, 210, &format!("{:.2}", c.pick_height), 3010);
-        hwnds[10] = make_field("Place Height (mm):", 285, 200, 210, &format!("{:.2}", c.place_height), 3011);
-        hwnds[11] = make_field("Mode (Chế độ gắp):", 285, 255, 210, &format!("{}", c.mode), 3012);
-        hwnds[12] = make_field("Skip (0=Bình thường, 1=Bỏ qua):", 285, 310, 210, &format!("{}", c.skip), 3013);
-
-        *EDIT_FIELDS.lock().unwrap() = hwnds;
-
-        let btn_save = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("💾 LƯU THAY ĐỔI").as_ptr(), 0x50000001, 230, 455, 170, 36, h_dlg, 3099 as *mut _, hinst, ptr::null_mut());
-        SendMessageW(btn_save, 0x0030, font_bold as usize, 1);
-
-        let btn_cancel = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Hủy").as_ptr(), 0x50000000, 415, 455, 90, 36, h_dlg, 3098 as *mut _, hinst, ptr::null_mut());
-        SendMessageW(btn_cancel, 0x0030, font_normal as usize, 1);
+        *INPLACE_EDIT.lock().unwrap() = (h_edit as usize, item, sub_item);
     }
 }
 
@@ -1102,8 +1081,12 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                                     lvi.state = 0;
                                     SendMessageW(hwnd_lv, 0x102B /* LVM_SETITEMSTATE */, !0, &lvi as *const _ as isize);
                                 }
-                            } else {
-                                edit_selected_row(hwnd, item);
+                            } else if sub_item >= 1 && sub_item <= 12 {
+                                let hwnd_lv = {
+                                    let state = STATE.lock().unwrap();
+                                    state.h_list_view
+                                };
+                                start_in_place_edit(hwnd_lv, item, sub_item);
                             }
                         }
                     }
