@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 import os
 import sys
 import re
@@ -8,19 +8,19 @@ from PIL import Image, ImageTk
 
 # Quản lý cấu hình 4 góc khay Feeder NeoDen YY1
 DEFAULT_FEEDER_DATA = {
-    "1": {"comment": "100nF", "footprint": "0603", "head": 0, "speed": 100},
-    "2": {"comment": "10k", "footprint": "0603", "head": 0, "speed": 100},
-    "3": {"comment": "1k", "footprint": "0603", "head": 0, "speed": 100},
-    "4": {"comment": "4.7k", "footprint": "0603", "head": 0, "speed": 100},
-    "5": {"comment": "0R", "footprint": "0603", "head": 0, "speed": 100},
-    "6": {"comment": "22pF", "footprint": "0603", "head": 0, "speed": 100},
-    "7": {"comment": "1uF", "footprint": "0603", "head": 0, "speed": 100},
-    "8": {"comment": "10uF", "footprint": "0805", "head": 0, "speed": 100},
-    "9": {"comment": "47uF", "footprint": "0805", "head": 0, "speed": 100},
-    "10": {"comment": "LED_RED", "footprint": "0603", "head": 0, "speed": 100},
-    "11": {"comment": "LED_GREEN", "footprint": "0603", "head": 0, "speed": 100},
-    "12": {"comment": "100k", "footprint": "0603", "head": 0, "speed": 100},
-    "13": {"comment": "2.2k", "footprint": "0603", "head": 0, "speed": 100},
+    "1": {"comment": "1K-0603", "footprint": "0603", "head": 0, "speed": 100},
+    "2": {"comment": "100uF-0603", "footprint": "0603", "head": 0, "speed": 100},
+    "3": {"comment": "10K-0805", "footprint": "0805", "head": 0, "speed": 100},
+    "4": {"comment": "100uF-0805", "footprint": "0805", "head": 0, "speed": 100},
+    "5": {"comment": "1K-0805", "footprint": "0805", "head": 0, "speed": 100},
+    "6": {"comment": "10K-0603", "footprint": "0603", "head": 0, "speed": 100},
+    "7": {"comment": "10uF-0805", "footprint": "0805", "head": 0, "speed": 100},
+    "8": {"comment": "2SC1805", "footprint": "SOT-23", "head": 0, "speed": 100},
+    "9": {"comment": "4.7K-0805", "footprint": "0805", "head": 0, "speed": 100},
+    "10": {"comment": "", "footprint": "0603", "head": 0, "speed": 100},
+    "11": {"comment": "", "footprint": "0603", "head": 0, "speed": 100},
+    "12": {"comment": "", "footprint": "0603", "head": 0, "speed": 100},
+    "13": {"comment": "", "footprint": "0603", "head": 0, "speed": 100},
     # Top-Left 14..24
     "14": {"comment": "", "footprint": "0603", "head": 0, "speed": 100},
     "15": {"comment": "", "footprint": "0603", "head": 0, "speed": 100},
@@ -34,16 +34,16 @@ DEFAULT_FEEDER_DATA = {
     "23": {"comment": "", "footprint": "SOT-23", "head": 0, "speed": 100},
     "24": {"comment": "", "footprint": "SOD-123", "head": 0, "speed": 100},
     # Bottom-Right 30..39
-    "30": {"comment": "SS34", "footprint": "SMA", "head": 0, "speed": 100},
-    "31": {"comment": "1N4148", "footprint": "SOD-123", "head": 0, "speed": 100},
-    "32": {"comment": "S8050", "footprint": "SOT-23", "head": 0, "speed": 100},
-    "33": {"comment": "S8550", "footprint": "SOT-23", "head": 0, "speed": 100},
-    "34": {"comment": "AMS1117-3.3", "footprint": "SOT-223", "head": 0, "speed": 90},
-    "35": {"comment": "AMS1117-5.0", "footprint": "SOT-223", "head": 0, "speed": 90},
-    "36": {"comment": "BSS138", "footprint": "SOT-23", "head": 0, "speed": 100},
-    "37": {"comment": "AO3400", "footprint": "SOT-23", "head": 0, "speed": 100},
-    "38": {"comment": "AO3401", "footprint": "SOT-23", "head": 0, "speed": 100},
-    "39": {"comment": "CH340C", "footprint": "SOP-16", "head": 0, "speed": 90},
+    "30": {"comment": "Red-0805", "footprint": "0805", "head": 0, "speed": 100},
+    "31": {"comment": "Green-0805", "footprint": "0805", "head": 0, "speed": 100},
+    "32": {"comment": "Yellow-0805", "footprint": "0805", "head": 0, "speed": 100},
+    "33": {"comment": "Blue-0805", "footprint": "0805", "head": 0, "speed": 100},
+    "34": {"comment": "Red-0603", "footprint": "0603", "head": 0, "speed": 100},
+    "35": {"comment": "Blue-0603", "footprint": "0603", "head": 0, "speed": 100},
+    "36": {"comment": "", "footprint": "SOT-23", "head": 0, "speed": 100},
+    "37": {"comment": "", "footprint": "SOT-23", "head": 0, "speed": 100},
+    "38": {"comment": "", "footprint": "SOT-23", "head": 0, "speed": 100},
+    "39": {"comment": "", "footprint": "SOP-16", "head": 0, "speed": 90},
     # Top-Right 40..50
     "40": {"comment": "", "footprint": "SOP-8", "head": 0, "speed": 100},
     "41": {"comment": "", "footprint": "SOP-8", "head": 0, "speed": 100},
@@ -127,29 +127,49 @@ class SplashScreen:
 
 
 class FeederMatrixDialog(tk.Toplevel):
-    """Hộp thoại cấu hình 50 Khay Feeder 4 Góc NeoDen YY1 gọn gàng"""
+    """Hộp thoại cấu hình 50 Khay Feeder 4 Góc NeoDen YY1 với Quản Lý Đa Cấu Hình Hiện Đại"""
     def __init__(self, parent, app):
         super().__init__(parent)
         self.app = app
-        self.title("⚙️ Cấu Hình 50 Khay Feeder 4 Góc - Máy NeoDen YY1")
-        self.geometry("660x730")
+        self.title("⚙️ Quản Lý Cấu Hình 50 Khay Feeder 4 Góc - Máy NeoDen YY1")
+        self.geometry("700x780")
         self.resizable(False, False)
         self.configure(bg="#0F172A")
         self.transient(parent)
         self.grab_set()
         
+        self.profiles_dir = os.path.join(self.app.base_dir, "feeder_profiles")
+        os.makedirs(self.profiles_dir, exist_ok=True)
+        
+        self.profile_var = tk.StringVar(value="Mac_Dinh")
         self.entries = {}
         self.setup_ui()
+        self.load_profile_list()
         
     def setup_ui(self):
-        # Tiêu đề
+        # Header banner
         hdr = tk.Frame(self, bg="#0F172A", padx=15, pady=8)
         hdr.pack(fill=tk.X)
         tk.Label(hdr, text="⚙️ CẤU HÌNH 50 KHAY FEEDER 4 GÓC (NEODEN YY1)", font=("Segoe UI", 12, "bold"), fg="#38BDF8", bg="#0F172A").pack(anchor=tk.W)
-        tk.Label(hdr, text="Nhập nhãn / trị số linh kiện mặc định cho từng khay (1..13, 14..24, 30..39, 40..50)", font=("Segoe UI", 8), fg="#94A3B8", bg="#0F172A").pack(anchor=tk.W)
+        tk.Label(hdr, text="Quản lý nhiều cấu hình linh kiện mặc định cho từng dự án mạch. Số 1, 14, 30, 40 nằm ở phía dưới.", font=("Segoe UI", 8), fg="#94A3B8", bg="#0F172A").pack(anchor=tk.W)
+        
+        # Profile Management Bar
+        prof_bar = tk.Frame(self, bg="#1E293B", padx=10, pady=6, bd=1, relief="ridge")
+        prof_bar.pack(fill=tk.X, padx=10, pady=(2, 6))
+        
+        tk.Label(prof_bar, text="📂 Cấu Hình (Profile):", font=("Segoe UI", 9, "bold"), fg="#F8FAFC", bg="#1E293B").pack(side=tk.LEFT, padx=(0, 6))
+        
+        self.cb_profile = ttk.Combobox(prof_bar, textvariable=self.profile_var, state="readonly", width=18, font=("Segoe UI", 9))
+        self.cb_profile.pack(side=tk.LEFT, padx=(0, 8))
+        self.cb_profile.bind("<<ComboboxSelected>>", self.on_profile_selected)
+        
+        tk.Button(prof_bar, text="➕ Tạo Mới", font=("Segoe UI", 8, "bold"), bg="#0284C7", fg="white", padx=8, pady=3, bd=0, command=self.create_new_profile).pack(side=tk.LEFT, padx=3)
+        tk.Button(prof_bar, text="💾 Lưu", font=("Segoe UI", 8, "bold"), bg="#10B981", fg="white", padx=8, pady=3, bd=0, command=self.save_current_profile).pack(side=tk.LEFT, padx=3)
+        tk.Button(prof_bar, text="📁 Lưu Thành...", font=("Segoe UI", 8), bg="#475569", fg="white", padx=8, pady=3, bd=0, command=self.save_as_profile).pack(side=tk.LEFT, padx=3)
+        tk.Button(prof_bar, text="🗑️ Xóa", font=("Segoe UI", 8), bg="#EF4444", fg="white", padx=8, pady=3, bd=0, command=self.delete_profile).pack(side=tk.LEFT, padx=3)
         
         # Container 4 góc
-        grid_frame = tk.Frame(self, bg="#0F172A", padx=10, pady=2)
+        grid_frame = tk.Frame(self, bg="#0F172A", padx=8, pady=0)
         grid_frame.pack(fill=tk.BOTH, expand=True)
         grid_frame.columnconfigure(0, weight=1)
         grid_frame.columnconfigure(1, weight=1)
@@ -164,13 +184,13 @@ class FeederMatrixDialog(tk.Toplevel):
         btn_bar = tk.Frame(self, bg="#1E293B", padx=15, pady=8)
         btn_bar.pack(fill=tk.X)
         
-        tk.Button(btn_bar, text="💾 LƯU & ÁP DỤNG", font=("Segoe UI", 9, "bold"), bg="#10B981", fg="white", padx=15, pady=5, bd=0, command=self.save_and_apply).pack(side=tk.RIGHT, padx=5)
+        tk.Button(btn_bar, text="💾 LƯU & ÁP DỤNG NGAY", font=("Segoe UI", 9, "bold"), bg="#10B981", fg="white", padx=16, pady=5, bd=0, command=self.save_and_apply).pack(side=tk.RIGHT, padx=5)
         tk.Button(btn_bar, text="🔄 Mặc Định", font=("Segoe UI", 9), bg="#475569", fg="white", padx=10, pady=5, bd=0, command=self.reset_default).pack(side=tk.RIGHT, padx=5)
         tk.Button(btn_bar, text="✖ Đóng", font=("Segoe UI", 9), bg="#334155", fg="white", padx=10, pady=5, bd=0, command=self.destroy).pack(side=tk.LEFT)
         
     def build_quadrant(self, parent, row, col, title, feeder_range, border_color):
         frame = tk.LabelFrame(parent, text=f"  {title}  ", font=("Segoe UI", 9, "bold"), fg=border_color, bg="#1E293B", bd=2, relief="groove", padx=6, pady=4)
-        frame.grid(row=row, column=col, sticky="nsew", padx=4, pady=3)
+        frame.grid(row=row, column=col, sticky="nsew", padx=4, pady=2)
         
         for f_no in feeder_range:
             f_str = str(f_no)
@@ -183,12 +203,106 @@ class FeederMatrixDialog(tk.Toplevel):
             lbl_no.pack(side=tk.LEFT, padx=(2, 4))
             
             e_cmt = tk.Entry(r, font=("Segoe UI", 8), bg="#0F172A", fg="#38BDF8", insertbackground="white", bd=1, relief="solid")
-            e_cmt.insert(0, cur.get("comment", ""))
+            e_cmt.insert(0, cur.get("comment", "") if isinstance(cur, dict) else str(cur))
             e_cmt.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
             
             self.entries[f_str] = e_cmt
             
+    def load_profile_list(self):
+        profiles = []
+        if os.path.exists(self.profiles_dir):
+            for fname in os.listdir(self.profiles_dir):
+                if fname.endswith(".json"):
+                    profiles.append(os.path.splitext(fname)[0])
+        if not profiles:
+            profiles = ["Mac_Dinh"]
+            self.save_profile_to_disk("Mac_Dinh", {str(k): v["comment"] for k, v in DEFAULT_FEEDER_DATA.items()})
+        profiles.sort()
+        self.cb_profile["values"] = profiles
+        if self.profile_var.get() not in profiles:
+            self.profile_var.set(profiles[0])
+            
+    def on_profile_selected(self, event=None):
+        prof_name = self.profile_var.get().strip()
+        filepath = os.path.join(self.profiles_dir, f"{prof_name}.json")
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    feeders = data.get("feeders", data)
+                    for slot_str, entry in self.entries.items():
+                        val = feeders.get(slot_str, "")
+                        if isinstance(val, dict): val = val.get("comment", "")
+                        entry.delete(0, tk.END)
+                        entry.insert(0, str(val))
+            except Exception as e:
+                messagebox.showerror("Lỗi Nạp Cấu Hình", f"Không thể đọc file {prof_name}.json: {e}")
+                
+    def get_current_ui_feeders(self):
+        res = {}
+        for f_str, entry in self.entries.items():
+            res[f_str] = entry.get().strip()
+        return res
+        
+    def save_profile_to_disk(self, prof_name, feeders_dict):
+        filepath = os.path.join(self.profiles_dir, f"{prof_name}.json")
+        data = {
+            "profile_name": prof_name,
+            "feeders": feeders_dict
+        }
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            
+    def save_current_profile(self):
+        prof_name = self.profile_var.get().strip()
+        if not prof_name: prof_name = "Mac_Dinh"
+        feeders = self.get_current_ui_feeders()
+        self.save_profile_to_disk(prof_name, feeders)
+        messagebox.showinfo("Thành Công", f"Đã lưu cấu hình [{prof_name}] thành công!", parent=self)
+        
+    def create_new_profile(self):
+        new_name = simpledialog.askstring("Tạo Cấu Hình Mới", "Nhập tên cấu hình mới (VD: Bo_Nguon, Du_An_1):", parent=self)
+        if new_name:
+            new_name = "".join(c for c in new_name.strip() if c.isalnum() or c in ("_", "-"))
+            if not new_name:
+                messagebox.showwarning("Tên Không Hợp Lệ", "Tên cấu hình không được để trống!", parent=self)
+                return
+            feeders = self.get_current_ui_feeders()
+            self.save_profile_to_disk(new_name, feeders)
+            self.load_profile_list()
+            self.profile_var.set(new_name)
+            messagebox.showinfo("Thành Công", f"Đã tạo mới cấu hình [{new_name}] thành công!", parent=self)
+            
+    def save_as_profile(self):
+        new_name = simpledialog.askstring("Lưu Thành Cấu Hình Khác", "Nhập tên cấu hình mới:", parent=self)
+        if new_name:
+            new_name = "".join(c for c in new_name.strip() if c.isalnum() or c in ("_", "-"))
+            if not new_name: return
+            feeders = self.get_current_ui_feeders()
+            self.save_profile_to_disk(new_name, feeders)
+            self.load_profile_list()
+            self.profile_var.set(new_name)
+            messagebox.showinfo("Thành Công", f"Đã lưu thành cấu hình [{new_name}] thành công!", parent=self)
+            
+    def delete_profile(self):
+        prof_name = self.profile_var.get().strip()
+        if prof_name in ("Mac_Dinh", "Mặc Định"):
+            messagebox.showwarning("Không Thể Xóa", "Không thể xóa cấu hình mặc định [Mac_Dinh]!", parent=self)
+            return
+        if messagebox.askyesno("Xác Nhận Xóa", f"Bạn có chắc muốn xóa vĩnh viễn cấu hình [{prof_name}]?", parent=self):
+            filepath = os.path.join(self.profiles_dir, f"{prof_name}.json")
+            if os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                except Exception as e:
+                    messagebox.showerror("Lỗi", f"Không thể xóa file: {e}", parent=self)
+                    return
+            self.load_profile_list()
+            self.on_profile_selected()
+            messagebox.showinfo("Thành Công", f"Đã xóa cấu hình [{prof_name}]!", parent=self)
+            
     def save_and_apply(self):
+        self.save_current_profile()
         for f_str, entry in self.entries.items():
             val = entry.get().strip()
             if f_str not in self.app.feeder_matrix:
@@ -198,14 +312,13 @@ class FeederMatrixDialog(tk.Toplevel):
             
         self.app.save_feeder_matrix_file()
         self.app.apply_feeder_assignments_to_components()
-        messagebox.showinfo("Thành Công", "🎉 Đã lưu cấu hình 50 khay Feeder 4 góc và cập nhật bảng dữ liệu!", parent=self)
+        messagebox.showinfo("Thành Công", "🎉 Đã lưu cấu hình và tự động gán lại số khay Feeder trên toàn bộ bảng linh kiện!", parent=self)
         self.destroy()
         
     def reset_default(self):
         if messagebox.askyesno("Xác nhận", "Khôi phục toàn bộ nhãn 50 khay Feeder về mặc định ban đầu?", parent=self):
-            self.app.feeder_matrix = json.loads(json.dumps(DEFAULT_FEEDER_DATA))
             for f_str, entry in self.entries.items():
-                cur = self.app.feeder_matrix.get(f_str, {}).get("comment", "")
+                cur = DEFAULT_FEEDER_DATA.get(f_str, {}).get("comment", "")
                 entry.delete(0, tk.END)
                 entry.insert(0, cur)
 
@@ -704,19 +817,54 @@ class NeoDenYY1App:
         return (cmt, prefix, num, des)
 
     def find_feeder_no(self, comment, footprint):
-        """Khớp linh kiện vào khay Feeder đã thiết lập theo 4 góc"""
+        """Khớp linh kiện thông minh vào khay Feeder đã thiết lập theo 4 góc"""
         cmt_clean = comment.strip().lower()
         fp_clean = footprint.strip().lower()
+        if not cmt_clean and not fp_clean:
+            return 1, 0, 100
+            
+        full_pair = f"{cmt_clean}-{fp_clean}"
         
-        # 1. Tìm chính xác theo Comment
+        # 1. Khớp tuyệt đối cả Comment & Footprint dạng "Value-Footprint" (VD: 1K-0603, 10K-0805, Red-0805)
         for f_id, f_cfg in self.feeder_matrix.items():
-            if f_cfg.get("comment", "").strip().lower() == cmt_clean and cmt_clean != "":
-                return int(f_id), f_cfg.get("head", 0), f_cfg.get("speed", 100)
+            cfg_raw = f_cfg.get("comment", "") if isinstance(f_cfg, dict) else str(f_cfg)
+            cfg_clean = cfg_raw.strip().lower()
+            if not cfg_clean: continue
+            
+            if cfg_clean == full_pair:
+                hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
+                spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
+                return int(f_id), hd, spd
                 
-        # 2. Tìm theo Footprint nếu chưa khớp Comment
+            if "-" in cfg_clean:
+                parts = cfg_clean.split("-", 1)
+                val_p = parts[0].strip()
+                fp_p = parts[1].strip()
+                if (val_p == cmt_clean or (val_p and val_p in cmt_clean) or (cmt_clean and cmt_clean in val_p)) and \
+                   (fp_p == fp_clean or (fp_p and fp_p in fp_clean) or (fp_clean and fp_clean in fp_p)):
+                    hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
+                    spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
+                    return int(f_id), hd, spd
+
+        # 2. Khớp chính xác Comment
         for f_id, f_cfg in self.feeder_matrix.items():
-            if f_cfg.get("footprint", "").strip().lower() == fp_clean and f_cfg.get("comment", "") == "":
-                return int(f_id), f_cfg.get("head", 0), f_cfg.get("speed", 100)
+            cfg_raw = f_cfg.get("comment", "") if isinstance(f_cfg, dict) else str(f_cfg)
+            cfg_clean = cfg_raw.strip().lower()
+            if not cfg_clean: continue
+            if cfg_clean == cmt_clean:
+                hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
+                spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
+                return int(f_id), hd, spd
+
+        # 3. Khớp mờ / chứa comment
+        for f_id, f_cfg in self.feeder_matrix.items():
+            cfg_raw = f_cfg.get("comment", "") if isinstance(f_cfg, dict) else str(f_cfg)
+            cfg_clean = cfg_raw.strip().lower()
+            if not cfg_clean: continue
+            if (cfg_clean in cmt_clean) or (cmt_clean in cfg_clean):
+                hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
+                spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
+                return int(f_id), hd, spd
                 
         return 1, 0, 100
         

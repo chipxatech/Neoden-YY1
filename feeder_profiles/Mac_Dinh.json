@@ -1,6 +1,4 @@
 {
-  "description": "NeoDen YY1 Feeder Bank 4-Quadrant Configuration",
-  "author": "CÔNG TY TNHH CÔNG NGHỆ CHIPXA",
   "profile_name": "Mặc Định",
   "feeders": {
     "1": "1K-0603",

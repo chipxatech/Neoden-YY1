@@ -336,6 +336,10 @@ unsafe extern "system" {
     fn SetFocus(hWnd: HWND) -> HWND;
     fn CallWindowProcW(lpPrevWndFunc: isize, hWnd: HWND, Msg: u32, wParam: usize, lParam: isize) -> isize;
     fn GetDlgItem(hDlg: HWND, nIDDlgItem: i32) -> HWND;
+    fn EnableWindow(hWnd: HWND, bEnable: i32) -> i32;
+    fn IsWindow(hWnd: HWND) -> i32;
+    fn IsDialogMessageW(hDlg: HWND, lpMsg: *mut MSG) -> i32;
+    fn SetForegroundWindow(hWnd: HWND) -> i32;
 }
 
 fn to_wstr(s: &str) -> Vec<u16> {
@@ -950,6 +954,8 @@ fn start_in_place_edit(hwnd_lv: HWND, item: i32, sub_item: i32) {
 }
 
 static FEEDER_MATRIX_RUST: Mutex<Option<std::collections::HashMap<i32, String>>> = Mutex::new(None);
+static ACTIVE_PROFILE_RUST: Mutex<String> = Mutex::new(String::new());
+static INPUT_DLG_BUFFER_RUST: Mutex<String> = Mutex::new(String::new());
 
 fn init_default_feeder_matrix_rust() {
     let mut opt = FEEDER_MATRIX_RUST.lock().unwrap();
@@ -957,51 +963,217 @@ fn init_default_feeder_matrix_rust() {
     for i in 1..=50 {
         map.insert(i, String::new());
     }
-    // Bottom-Left 1..13
-    map.insert(1, "100nF".to_string());
-    map.insert(2, "10k".to_string());
-    map.insert(3, "1k".to_string());
-    map.insert(4, "4.7k".to_string());
-    map.insert(5, "0R".to_string());
-    map.insert(6, "22pF".to_string());
-    map.insert(7, "1uF".to_string());
-    map.insert(8, "10uF".to_string());
-    map.insert(9, "47uF".to_string());
-    map.insert(10, "LED_RED".to_string());
-    map.insert(11, "LED_GREEN".to_string());
-    map.insert(12, "100k".to_string());
-    map.insert(13, "2.2k".to_string());
+    // Bottom-Left 1..13 theo ảnh mẫu
+    map.insert(1, "1K-0603".to_string());
+    map.insert(2, "100uF-0603".to_string());
+    map.insert(3, "10K-0805".to_string());
+    map.insert(4, "100uF-0805".to_string());
+    map.insert(5, "1K-0805".to_string());
+    map.insert(6, "10K-0603".to_string());
+    map.insert(7, "10uF-0805".to_string());
+    map.insert(8, "2SC1805".to_string());
+    map.insert(9, "4.7K-0805".to_string());
 
-    // Bottom-Right 30..39
-    map.insert(30, "SS34".to_string());
-    map.insert(31, "1N4148".to_string());
-    map.insert(32, "S8050".to_string());
-    map.insert(33, "S8550".to_string());
-    map.insert(34, "AMS1117-3.3".to_string());
-    map.insert(35, "AMS1117-5.0".to_string());
-    map.insert(36, "BSS138".to_string());
-    map.insert(37, "AO3400".to_string());
-    map.insert(38, "AO3401".to_string());
-    map.insert(39, "CH340C".to_string());
+    // Bottom-Right 30..39 theo ảnh mẫu
+    map.insert(30, "Red-0805".to_string());
+    map.insert(31, "Green-0805".to_string());
+    map.insert(32, "Yellow-0805".to_string());
+    map.insert(33, "Blue-0805".to_string());
+    map.insert(34, "Red-0603".to_string());
+    map.insert(35, "Blue-0603".to_string());
     *opt = Some(map);
 }
 
-fn match_feeder_slot_rust(cmt: &str, _fp: &str) -> i32 {
+fn match_feeder_slot_rust(cmt: &str, fp: &str) -> i32 {
     let cmt_clean = cmt.trim().to_lowercase();
-    if cmt_clean.is_empty() { return 1; }
+    let fp_clean = fp.trim().to_lowercase();
+    if cmt_clean.is_empty() && fp_clean.is_empty() { return 1; }
 
+    let full_pair = format!("{}-{}", cmt_clean, fp_clean);
     let opt = FEEDER_MATRIX_RUST.lock().unwrap();
     if let Some(ref map) = *opt {
+        // 1. Khớp tuyệt đối Value-Footprint (VD: 1k-0603, 10k-0805)
         for slot in 1..=50 {
             if let Some(val) = map.get(&slot) {
                 let v_clean = val.trim().to_lowercase();
-                if !v_clean.is_empty() && (v_clean == cmt_clean || cmt_clean.contains(&v_clean) || v_clean.contains(&cmt_clean)) {
+                if !v_clean.is_empty() {
+                    if v_clean == full_pair { return slot; }
+                    if let Some(dash_idx) = v_clean.find('-') {
+                        let val_p = v_clean[..dash_idx].trim();
+                        let fp_p = v_clean[dash_idx + 1..].trim();
+                        if (val_p == cmt_clean || (!val_p.is_empty() && cmt_clean.contains(val_p)) || (!cmt_clean.is_empty() && val_p.contains(&cmt_clean))) &&
+                           (fp_p == fp_clean || (!fp_p.is_empty() && fp_clean.contains(fp_p)) || (!fp_clean.is_empty() && fp_p.contains(&fp_clean))) {
+                            return slot;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Khớp chính xác Comment
+        for slot in 1..=50 {
+            if let Some(val) = map.get(&slot) {
+                let v_clean = val.trim().to_lowercase();
+                if !v_clean.is_empty() && v_clean == cmt_clean {
+                    return slot;
+                }
+            }
+        }
+
+        // 3. Khớp mờ / chứa Comment
+        for slot in 1..=50 {
+            if let Some(val) = map.get(&slot) {
+                let v_clean = val.trim().to_lowercase();
+                if !v_clean.is_empty() && (v_clean.contains(&cmt_clean) || cmt_clean.contains(&v_clean)) {
                     return slot;
                 }
             }
         }
     }
     1
+}
+
+fn list_feeder_profiles_rust() -> Vec<String> {
+    let _ = std::fs::create_dir_all("feeder_profiles");
+    let mut list = Vec::new();
+    if let Ok(entries) = std::fs::read_dir("feeder_profiles") {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
+                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    list.push(stem.to_string());
+                }
+            }
+        }
+    }
+    if list.is_empty() {
+        list.push("Mac_Dinh".to_string());
+    }
+    list.sort();
+    list
+}
+
+fn save_profile_to_disk_rust(prof_name: &str, data: &std::collections::HashMap<i32, String>) {
+    let _ = std::fs::create_dir_all("feeder_profiles");
+    let path = format!("feeder_profiles/{}.json", prof_name);
+    let mut json_str = format!("{{\n  \"profile_name\": \"{}\",\n  \"feeders\": {{\n", prof_name);
+    for i in 1..=50 {
+        let val = data.get(&i).map(|s| s.as_str()).unwrap_or("");
+        json_str.push_str(&format!("    \"{}\": \"{}\"{}", i, val, if i < 50 { ",\n" } else { "\n" }));
+    }
+    json_str.push_str("  }\n}\n");
+    let _ = std::fs::write(path, &json_str);
+    let _ = std::fs::write("feeder_matrix.json", &json_str);
+}
+
+fn load_profile_from_disk_rust(prof_name: &str) -> std::collections::HashMap<i32, String> {
+    let mut map = std::collections::HashMap::new();
+    for i in 1..=50 { map.insert(i, String::new()); }
+    let path = format!("feeder_profiles/{}.json", prof_name);
+    if let Ok(content) = std::fs::read_to_string(path) {
+        for line in content.lines() {
+            if let Some(q1) = line.find('"') {
+                if let Some(q2) = line[q1 + 1..].find('"') {
+                    let key = &line[q1 + 1..q1 + 1 + q2];
+                    if let Ok(slot) = key.parse::<i32>() {
+                        if (1..=50).contains(&slot) {
+                            if let Some(colon) = line[q1 + 1 + q2..].find(':') {
+                                let after_col = &line[q1 + 1 + q2 + colon..];
+                                if let Some(vq1) = after_col.find('"') {
+                                    if let Some(vq2) = after_col[vq1 + 1..].find('"') {
+                                        let val = &after_col[vq1 + 1..vq1 + 1 + vq2];
+                                        map.insert(slot, val.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    map
+}
+
+unsafe extern "system" fn input_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize {
+    match msg {
+        0x0111 => { // WM_COMMAND
+            let id = (wparam & 0xFFFF) as u32;
+            if id == 1 { // IDOK
+                let h_ed = GetDlgItem(hwnd, 101);
+                let mut buf = [0u16; 128];
+                GetWindowTextW(h_ed, buf.as_mut_ptr(), 128);
+                let mut guard = INPUT_DLG_BUFFER_RUST.lock().unwrap();
+                *guard = from_wstr(buf.as_ptr());
+                DestroyWindow(hwnd);
+            } else if id == 2 { // IDCANCEL
+                let mut guard = INPUT_DLG_BUFFER_RUST.lock().unwrap();
+                guard.clear();
+                DestroyWindow(hwnd);
+            }
+            0
+        }
+        0x0010 => { // WM_CLOSE
+            let mut guard = INPUT_DLG_BUFFER_RUST.lock().unwrap();
+            guard.clear();
+            DestroyWindow(hwnd);
+            0
+        }
+        _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+    }
+}
+
+unsafe fn show_input_box_rust(parent: HWND, title: &str, prompt: &str) -> Option<String> {
+    {
+        let mut guard = INPUT_DLG_BUFFER_RUST.lock().unwrap();
+        guard.clear();
+    }
+    let mut pr: RECT = std::mem::zeroed();
+    GetWindowRect(parent, &mut pr);
+    let dlg_w = 360;
+    let dlg_h = 150;
+    let dlg_x = pr.left + (pr.right - pr.left - dlg_w) / 2;
+    let dlg_y = pr.top + (pr.bottom - pr.top - dlg_h) / 2;
+    let hinst = GetModuleHandleW(ptr::null());
+
+    let h_dlg = CreateWindowExW(
+        0x00000001, to_wstr("#32770").as_ptr(), to_wstr(title).as_ptr(),
+        0x80000000 | 0x00C00000 | 0x00080000 | 0x10000000,
+        dlg_x, dlg_y, dlg_w, dlg_h, parent, ptr::null_mut(), hinst, ptr::null_mut()
+    );
+    if h_dlg.is_null() { return None; }
+    SetWindowLongPtrW(h_dlg, -4, input_dlg_proc_rust as *const () as usize as isize);
+
+    let font_bold = { STATE.lock().unwrap().font_main_bold };
+    let font_normal = { STATE.lock().unwrap().font_main_sub };
+
+    let h_lbl = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr(prompt).as_ptr(), 0x50000000, 15, 12, 315, 20, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    SendMessageW(h_lbl, 0x0030, font_normal as usize, 1);
+
+    let h_ed = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr("").as_ptr(), 0x50000080, 15, 36, 315, 24, h_dlg, 101 as *mut _, hinst, ptr::null_mut());
+    SendMessageW(h_ed, 0x0030, font_normal as usize, 1);
+    SetFocus(h_ed);
+
+    let h_ok = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Đồng Ý").as_ptr(), 0x50000001, 155, 72, 80, 28, h_dlg, 1 as *mut _, hinst, ptr::null_mut());
+    SendMessageW(h_ok, 0x0030, font_bold as usize, 1);
+
+    let h_cancel = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Hủy").as_ptr(), 0x50000000, 250, 72, 80, 28, h_dlg, 2 as *mut _, hinst, ptr::null_mut());
+    SendMessageW(h_cancel, 0x0030, font_normal as usize, 1);
+
+    EnableWindow(parent, 0);
+    let mut msg: MSG = std::mem::zeroed();
+    while IsWindow(h_dlg) != 0 && GetMessageW(&mut msg, ptr::null_mut(), 0, 0) > 0 {
+        if IsDialogMessageW(h_dlg, &mut msg) == 0 {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+    EnableWindow(parent, 1);
+    SetForegroundWindow(parent);
+
+    let res = INPUT_DLG_BUFFER_RUST.lock().unwrap().clone();
+    let trimmed = res.trim().to_string();
+    if !trimmed.is_empty() { Some(trimmed) } else { None }
 }
 
 unsafe fn create_feeder_slot_control_rust(h_parent: HWND, slot: i32, x: i32, y: i32, val: &str) {
@@ -1036,23 +1208,142 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
     match msg {
         0x0111 => { // WM_COMMAND
             let id = (wparam & 0xFFFF) as u32;
-            if id == 1 || id == 2001 { // Lưu cấu hình
-                {
-                    let mut opt = FEEDER_MATRIX_RUST.lock().unwrap();
-                    if opt.is_none() {
-                        *opt = Some(std::collections::HashMap::new());
+            let code = ((wparam >> 16) & 0xFFFF) as u16;
+
+            if id == 3001 && code == 1 /* CBN_SELCHANGE */ {
+                let h_cb = GetDlgItem(hwnd, 3001);
+                let idx = SendMessageW(h_cb, 0x0147 /* CB_GETCURSEL */, 0, 0) as i32;
+                if idx >= 0 {
+                    let mut buf = [0u16; 128];
+                    SendMessageW(h_cb, 0x0148 /* CB_GETLBTEXT */, idx as usize, buf.as_mut_ptr() as isize);
+                    let sel_name = from_wstr(buf.as_ptr());
+                    {
+                        let mut act = ACTIVE_PROFILE_RUST.lock().unwrap();
+                        *act = sel_name.clone();
                     }
-                    if let Some(ref mut map) = *opt {
-                        for slot in 1..=50 {
-                            let h_ed = GetDlgItem(hwnd, 5000 + slot);
-                            if !h_ed.is_null() {
-                                let mut buf = [0u16; 128];
-                                GetWindowTextW(h_ed, buf.as_mut_ptr(), 128);
-                                let s = from_wstr(buf.as_ptr());
-                                map.insert(slot, s);
-                            }
+                    let fd = load_profile_from_disk_rust(&sel_name);
+                    for slot in 1..=50 {
+                        let h_ed = GetDlgItem(hwnd, 5000 + slot);
+                        if !h_ed.is_null() {
+                            let val = fd.get(&slot).map(|s| s.as_str()).unwrap_or("");
+                            SetWindowTextW(h_ed, to_wstr(val).as_ptr());
                         }
                     }
+                }
+            } else if id == 3002 { // ➕ Tạo Mới
+                if let Some(new_name) = show_input_box_rust(hwnd, "Tạo Cấu Hình Mới", "Nhập tên cấu hình mới (VD: Bo_Mach_A):") {
+                    let mut map = std::collections::HashMap::new();
+                    for slot in 1..=50 {
+                        let h_ed = GetDlgItem(hwnd, 5000 + slot);
+                        if !h_ed.is_null() {
+                            let mut buf = [0u16; 128];
+                            GetWindowTextW(h_ed, buf.as_mut_ptr(), 128);
+                            map.insert(slot, from_wstr(buf.as_ptr()));
+                        }
+                    }
+                    save_profile_to_disk_rust(&new_name, &map);
+                    {
+                        let mut act = ACTIVE_PROFILE_RUST.lock().unwrap();
+                        *act = new_name.clone();
+                    }
+                    let h_cb = GetDlgItem(hwnd, 3001);
+                    SendMessageW(h_cb, 0x014B /* CB_RESETCONTENT */, 0, 0);
+                    let plist = list_feeder_profiles_rust();
+                    let mut sel_idx = 0;
+                    for (i, p) in plist.iter().enumerate() {
+                        SendMessageW(h_cb, 0x0143 /* CB_ADDSTRING */, 0, to_wstr(p).as_ptr() as isize);
+                        if p == &new_name { sel_idx = i; }
+                    }
+                    SendMessageW(h_cb, 0x014E /* CB_SETCURSEL */, sel_idx, 0);
+                    MessageBoxW(hwnd, to_wstr("🎉 Đã tạo cấu hình mới thành công!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
+                }
+            } else if id == 3003 { // 💾 Lưu
+                let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
+                let mut map = std::collections::HashMap::new();
+                for slot in 1..=50 {
+                    let h_ed = GetDlgItem(hwnd, 5000 + slot);
+                    if !h_ed.is_null() {
+                        let mut buf = [0u16; 128];
+                        GetWindowTextW(h_ed, buf.as_mut_ptr(), 128);
+                        map.insert(slot, from_wstr(buf.as_ptr()));
+                    }
+                }
+                save_profile_to_disk_rust(if act_name.is_empty() { "Mac_Dinh" } else { &act_name }, &map);
+                MessageBoxW(hwnd, to_wstr("💾 Đã lưu cấu hình hiện tại thành công!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
+            } else if id == 3004 { // 📁 Lưu Thành...
+                if let Some(new_name) = show_input_box_rust(hwnd, "Lưu Thành Cấu Hình Khác", "Nhập tên cấu hình mới:") {
+                    let mut map = std::collections::HashMap::new();
+                    for slot in 1..=50 {
+                        let h_ed = GetDlgItem(hwnd, 5000 + slot);
+                        if !h_ed.is_null() {
+                            let mut buf = [0u16; 128];
+                            GetWindowTextW(h_ed, buf.as_mut_ptr(), 128);
+                            map.insert(slot, from_wstr(buf.as_ptr()));
+                        }
+                    }
+                    save_profile_to_disk_rust(&new_name, &map);
+                    {
+                        let mut act = ACTIVE_PROFILE_RUST.lock().unwrap();
+                        *act = new_name.clone();
+                    }
+                    let h_cb = GetDlgItem(hwnd, 3001);
+                    SendMessageW(h_cb, 0x014B /* CB_RESETCONTENT */, 0, 0);
+                    let plist = list_feeder_profiles_rust();
+                    let mut sel_idx = 0;
+                    for (i, p) in plist.iter().enumerate() {
+                        SendMessageW(h_cb, 0x0143 /* CB_ADDSTRING */, 0, to_wstr(p).as_ptr() as isize);
+                        if p == &new_name { sel_idx = i; }
+                    }
+                    SendMessageW(h_cb, 0x014E /* CB_SETCURSEL */, sel_idx, 0);
+                    MessageBoxW(hwnd, to_wstr("🎉 Đã lưu thành cấu hình mới!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
+                }
+            } else if id == 3005 { // 🗑️ Xóa
+                let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
+                if act_name == "Mac_Dinh" || act_name == "Mặc Định" {
+                    MessageBoxW(hwnd, to_wstr("Không thể xóa cấu hình mặc định [Mac_Dinh]!").as_ptr(), to_wstr("Thông Báo").as_ptr(), 0x00000030);
+                    return 0;
+                }
+                if MessageBoxW(hwnd, to_wstr("Bạn có chắc muốn xóa vĩnh viễn cấu hình này?").as_ptr(), to_wstr("Xác Nhận Xóa").as_ptr(), 0x00000020 | 0x00000004) == 6 {
+                    let _ = std::fs::remove_file(format!("feeder_profiles/{}.json", act_name));
+                    {
+                        let mut act = ACTIVE_PROFILE_RUST.lock().unwrap();
+                        *act = "Mac_Dinh".to_string();
+                    }
+                    let h_cb = GetDlgItem(hwnd, 3001);
+                    SendMessageW(h_cb, 0x014B, 0, 0);
+                    let plist = list_feeder_profiles_rust();
+                    let mut sel_idx = 0;
+                    for (i, p) in plist.iter().enumerate() {
+                        SendMessageW(h_cb, 0x0143, 0, to_wstr(p).as_ptr() as isize);
+                        if p == "Mac_Dinh" { sel_idx = i; }
+                    }
+                    SendMessageW(h_cb, 0x014E, sel_idx, 0);
+                    let fd = load_profile_from_disk_rust("Mac_Dinh");
+                    for slot in 1..=50 {
+                        let h_ed = GetDlgItem(hwnd, 5000 + slot);
+                        if !h_ed.is_null() {
+                            let val = fd.get(&slot).map(|s| s.as_str()).unwrap_or("");
+                            SetWindowTextW(h_ed, to_wstr(val).as_ptr());
+                        }
+                    }
+                    MessageBoxW(hwnd, to_wstr("Đã xóa cấu hình!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
+                }
+            } else if id == 1 || id == 2001 { // 💾 Lưu & Áp Dụng
+                let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
+                let mut map = std::collections::HashMap::new();
+                for slot in 1..=50 {
+                    let h_ed = GetDlgItem(hwnd, 5000 + slot);
+                    if !h_ed.is_null() {
+                        let mut buf = [0u16; 128];
+                        GetWindowTextW(h_ed, buf.as_mut_ptr(), 128);
+                        map.insert(slot, from_wstr(buf.as_ptr()));
+                    }
+                }
+                save_profile_to_disk_rust(if act_name.is_empty() { "Mac_Dinh" } else { &act_name }, &map);
+
+                {
+                    let mut opt = FEEDER_MATRIX_RUST.lock().unwrap();
+                    *opt = Some(map);
                 }
 
                 // Cập nhật lại số khay cho toàn bộ linh kiện
@@ -1066,7 +1357,7 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                     }
                 }
                 refresh_list_view();
-                MessageBoxW(hwnd, to_wstr("🎉 Đã lưu cấu hình 50 khay Feeder 4 góc và cập nhật bảng linh kiện thành công!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
+                MessageBoxW(hwnd, to_wstr("🎉 Đã lưu cấu hình và tự động gán lại toàn bộ số khay Feeder trên bảng mạch!").as_ptr(), to_wstr("Thành Công").as_ptr(), 0x00000040);
                 DestroyWindow(hwnd);
             } else if id == 2002 { // Khôi phục mặc định
                 if MessageBoxW(hwnd, to_wstr("Bạn có chắc muốn khôi phục lại nhãn 50 khay Feeder về mặc định ban đầu?").as_ptr(), to_wstr("Xác Nhận").as_ptr(), 0x00000020 | 0x00000004) == 6 {
@@ -1098,14 +1389,14 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
 unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
     let mut pr: RECT = std::mem::zeroed();
     GetWindowRect(parent, &mut pr);
-    let dlg_w = 660;
-    let dlg_h = 720;
+    let dlg_w = 675;
+    let dlg_h = 765;
     let dlg_x = pr.left + (pr.right - pr.left - dlg_w) / 2;
     let dlg_y = pr.top + (pr.bottom - pr.top - dlg_h) / 2;
 
     let hinst = GetModuleHandleW(ptr::null());
     let h_dlg = CreateWindowExW(
-        0x00000001, to_wstr("#32770").as_ptr(), to_wstr("⚙️ Cấu Hình 50 Khay Feeder 4 Góc (NeoDen YY1)").as_ptr(),
+        0x00000001, to_wstr("#32770").as_ptr(), to_wstr("⚙️ Quản Lý Cấu Hình 50 Khay Feeder 4 Góc (NeoDen YY1)").as_ptr(),
         0x80000000 | 0x00C00000 | 0x00080000 | 0x10000000,
         dlg_x, dlg_y, dlg_w, dlg_h, parent, ptr::null_mut(), hinst, ptr::null_mut()
     );
@@ -1122,16 +1413,44 @@ unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
         state.font_main_sub
     };
 
-    let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Trên Trái (Khay 14 → 24) ").as_ptr(), 0x50000007, 15, 10, 300, 280, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    // Profile Bar
+    let h_lbl_prof = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("📂 Cấu Hình:").as_ptr(), 0x50000002, 15, 14, 90, 20, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    SendMessageW(h_lbl_prof, 0x0030, font_bold as usize, 1);
+
+    let h_cb_prof = CreateWindowExW(0, to_wstr("COMBOBOX").as_ptr(), to_wstr("").as_ptr(), 0x50000003 | 0x00200000, 110, 11, 160, 200, h_dlg, 3001 as *mut _, hinst, ptr::null_mut());
+    SendMessageW(h_cb_prof, 0x0030, font_normal as usize, 1);
+
+    let plist = list_feeder_profiles_rust();
+    let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
+    let mut sel_idx = 0;
+    for (i, p) in plist.iter().enumerate() {
+        SendMessageW(h_cb_prof, 0x0143, 0, to_wstr(p).as_ptr() as isize);
+        if p == &act_name || (act_name.is_empty() && p == "Mac_Dinh") { sel_idx = i; }
+    }
+    SendMessageW(h_cb_prof, 0x014E, sel_idx, 0);
+
+    let btn_new = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("➕ Tạo Mới").as_ptr(), 0x50000000, 280, 10, 85, 26, h_dlg, 3002 as *mut _, hinst, ptr::null_mut());
+    SendMessageW(btn_new, 0x0030, font_bold as usize, 1);
+
+    let btn_save_p = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("💾 Lưu").as_ptr(), 0x50000000, 370, 10, 65, 26, h_dlg, 3003 as *mut _, hinst, ptr::null_mut());
+    SendMessageW(btn_save_p, 0x0030, font_bold as usize, 1);
+
+    let btn_save_as = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("📁 Lưu Thành...").as_ptr(), 0x50000000, 440, 10, 105, 26, h_dlg, 3004 as *mut _, hinst, ptr::null_mut());
+    SendMessageW(btn_save_as, 0x0030, font_normal as usize, 1);
+
+    let btn_del_p = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("🗑️ Xóa").as_ptr(), 0x50000000, 550, 10, 65, 26, h_dlg, 3005 as *mut _, hinst, ptr::null_mut());
+    SendMessageW(btn_del_p, 0x0030, font_normal as usize, 1);
+
+    let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Trên Trái (Khay 14 → 24) ").as_ptr(), 0x50000007, 15, 45, 305, 280, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
     SendMessageW(grp1, 0x0030, font_bold as usize, 1);
 
-    let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Trên Phải (Khay 40 → 50) ").as_ptr(), 0x50000007, 330, 10, 300, 280, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Trên Phải (Khay 40 → 50) ").as_ptr(), 0x50000007, 335, 45, 305, 280, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
     SendMessageW(grp2, 0x0030, font_bold as usize, 1);
 
-    let grp3 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Dưới Trái (Khay 1 → 13) ").as_ptr(), 0x50000007, 15, 295, 300, 330, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    let grp3 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Dưới Trái (Khay 1 → 13) ").as_ptr(), 0x50000007, 15, 330, 305, 330, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
     SendMessageW(grp3, 0x0030, font_bold as usize, 1);
 
-    let grp4 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Dưới Phải (Khay 30 → 39) ").as_ptr(), 0x50000007, 330, 295, 300, 330, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+    let grp4 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📌 Góc Dưới Phải (Khay 30 → 39) ").as_ptr(), 0x50000007, 335, 330, 305, 330, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
     SendMessageW(grp4, 0x0030, font_bold as usize, 1);
 
     let opt = FEEDER_MATRIX_RUST.lock().unwrap();
@@ -1140,37 +1459,37 @@ unsafe fn open_feeder_matrix_dialog_rust(parent: HWND) {
     for i in 0..11 {
         let slot = 24 - i;
         let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
-        create_feeder_slot_control_rust(h_dlg, slot, 25, 32 + i * 22, val);
+        create_feeder_slot_control_rust(h_dlg, slot, 25, 68 + i * 22, val);
     }
 
     // 2. Góc Trên Phải: Khay 40..50 (#40 ở dưới cùng, #50 ở trên cùng)
     for i in 0..11 {
         let slot = 50 - i;
         let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
-        create_feeder_slot_control_rust(h_dlg, slot, 340, 32 + i * 22, val);
+        create_feeder_slot_control_rust(h_dlg, slot, 345, 68 + i * 22, val);
     }
 
     // 3. Góc Dưới Trái: Khay 1..13 (#01 ở dưới cùng, #13 ở trên cùng)
     for i in 0..13 {
         let slot = 13 - i;
         let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
-        create_feeder_slot_control_rust(h_dlg, slot, 25, 318 + i * 23, val);
+        create_feeder_slot_control_rust(h_dlg, slot, 25, 352 + i * 23, val);
     }
 
     // 4. Góc Dưới Phải: Khay 30..39 (#30 ở dưới cùng, #39 ở trên cùng)
     for i in 0..10 {
         let slot = 39 - i;
         let val = opt.as_ref().and_then(|m| m.get(&slot)).map(|s| s.as_str()).unwrap_or("");
-        create_feeder_slot_control_rust(h_dlg, slot, 340, 318 + i * 23, val);
+        create_feeder_slot_control_rust(h_dlg, slot, 345, 352 + i * 23, val);
     }
 
-    let btn_save = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("💾 LƯU & ÁP DỤNG").as_ptr(), 0x50000001, 440, 635, 190, 36, h_dlg, 2001 as *mut _, hinst, ptr::null_mut());
+    let btn_save = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("💾 LƯU & ÁP DỤNG NGAY").as_ptr(), 0x50000001, 440, 675, 200, 36, h_dlg, 2001 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_save, 0x0030, font_bold as usize, 1);
 
-    let btn_reset = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("🔄 Mặc Định").as_ptr(), 0x50000000, 310, 635, 120, 36, h_dlg, 2002 as *mut _, hinst, ptr::null_mut());
+    let btn_reset = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("🔄 Mặc Định").as_ptr(), 0x50000000, 310, 675, 120, 36, h_dlg, 2002 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_reset, 0x0030, font_normal as usize, 1);
 
-    let btn_cancel = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Đóng").as_ptr(), 0x50000000, 215, 635, 85, 36, h_dlg, 2 as *mut _, hinst, ptr::null_mut());
+    let btn_cancel = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Đóng").as_ptr(), 0x50000000, 215, 675, 85, 36, h_dlg, 2 as *mut _, hinst, ptr::null_mut());
     SendMessageW(btn_cancel, 0x0030, font_normal as usize, 1);
 }
 
