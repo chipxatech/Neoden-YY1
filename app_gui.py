@@ -441,6 +441,7 @@ class NeoDenYY1App:
         self.top_components = []
         self.bot_components = []
         self.current_layer = "TOP"
+        self.origin_type = "BOTTOM_LEFT"
         
         # Nạp ma trận Feeder
         self.active_profile = "Mac_Dinh"
@@ -653,17 +654,21 @@ class NeoDenYY1App:
         cfg_frame = ttk.LabelFrame(main_container, text="  3. Lưu / Xuất File Sau Khi Đã Chỉnh Sửa  ", style="Card.TLabelframe", padding=10)
         cfg_frame.pack(fill=tk.X)
         
-        row1 = ttk.Frame(cfg_frame, style="Card.TFrame")
-        row1.pack(fill=tk.X, pady=2)
+        self.row_export = ttk.Frame(cfg_frame, style="Card.TFrame")
+        self.row_export.pack(fill=tk.X, pady=2)
         
-        ttk.Label(row1, text="Tên file TOP:").pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Entry(row1, textvariable=self.top_output_name, width=20, font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=(0, 25))
+        self.lbl_top = ttk.Label(self.row_export, text="Tên file TOP:")
+        self.lbl_top.pack(side=tk.LEFT, padx=(0, 5))
+        self.entry_top = ttk.Entry(self.row_export, textvariable=self.top_output_name, width=20, font=("Segoe UI", 9))
+        self.entry_top.pack(side=tk.LEFT, padx=(0, 25))
         
-        ttk.Label(row1, text="Tên file BOTTOM:").pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Entry(row1, textvariable=self.bot_output_name, width=20, font=("Segoe UI", 9)).pack(side=tk.LEFT)
+        self.lbl_bot = ttk.Label(self.row_export, text="Tên file BOTTOM:")
+        self.lbl_bot.pack(side=tk.LEFT, padx=(0, 5))
+        self.entry_bot = ttk.Entry(self.row_export, textvariable=self.bot_output_name, width=20, font=("Segoe UI", 9))
+        self.entry_bot.pack(side=tk.LEFT)
         
-        btn_convert = ttk.Button(cfg_frame, text="💾 LƯU FILE ĐÃ CHỈNH SỬA CHO MÁY NEODEN YY1", style="Convert.TButton", command=self.save_and_export)
-        btn_convert.pack(fill=tk.X, pady=(8, 2))
+        self.btn_convert = ttk.Button(cfg_frame, text="💾 LƯU FILE ĐÃ CHỈNH SỬA CHO MÁY NEODEN YY1", style="Convert.TButton", command=self.save_and_export)
+        self.btn_convert.pack(fill=tk.X, pady=(8, 2))
         
     def create_table(self, parent_tab):
         container = ttk.Frame(parent_tab, style="Card.TFrame")
@@ -1209,11 +1214,128 @@ class NeoDenYY1App:
                 self.assign_dynamic_feeders(self.top_components)
                 self.assign_dynamic_feeders(self.bot_components)
             
-            self.recalc_bottom_coordinates()
+            self.origin_type = self.detect_origin_type()
+            self.recalc_coordinates()
+            self.update_layer_and_origin_ui()
             self.refresh_tables()
             
         except Exception as e:
             messagebox.showerror("Lỗi Đọc File", f"Chi tiết: {str(e)}")
+
+    def detect_origin_type(self):
+        all_comps = self.top_components + self.bot_components
+        if not all_comps:
+            return "UNKNOWN"
+        min_x = min(c["raw_mid_x"] for c in all_comps)
+        max_x = max(c["raw_mid_x"] for c in all_comps)
+        min_y = min(c["raw_mid_y"] for c in all_comps)
+        
+        if min_y < -0.1:
+            return "INVALID"
+            
+        if min_x >= -0.1:
+            return "BOTTOM_LEFT"
+        elif max_x <= 0.1:
+            return "BOTTOM_RIGHT"
+        else:
+            return "INVALID"
+
+    def recalc_coordinates(self):
+        bw_str = self.board_width_var.get().strip()
+        try:
+            bw = float(bw_str) if bw_str else 0.0
+        except ValueError:
+            bw = 0.0
+
+        if self.origin_type == "BOTTOM_LEFT":
+            for c in self.top_components:
+                c["mid_x"] = c["raw_mid_x"]
+                c["mid_y"] = c["raw_mid_y"]
+            for c in self.bot_components:
+                c["mid_x"] = (bw - c["raw_mid_x"]) if bw > 0.0 else c["raw_mid_x"]
+                c["mid_y"] = c["raw_mid_y"]
+        elif self.origin_type == "BOTTOM_RIGHT":
+            for c in self.bot_components:
+                c["mid_x"] = abs(c["raw_mid_x"])
+                c["mid_y"] = c["raw_mid_y"]
+            for c in self.top_components:
+                c["mid_x"] = (bw + c["raw_mid_x"]) if bw > 0.0 else abs(c["raw_mid_x"])
+                c["mid_y"] = c["raw_mid_y"]
+        else:
+            for c in self.top_components:
+                c["mid_x"] = c["raw_mid_x"]
+                c["mid_y"] = c["raw_mid_y"]
+            for c in self.bot_components:
+                c["mid_x"] = c["raw_mid_x"]
+                c["mid_y"] = c["raw_mid_y"]
+
+    def update_layer_and_origin_ui(self):
+        has_top = bool(self.top_components)
+        has_bot = bool(self.bot_components)
+        
+        if hasattr(self, "notebook"):
+            if has_top and not has_bot:
+                self.notebook.tab(0, state="normal")
+                self.notebook.tab(1, state="disabled")
+                self.notebook.select(0)
+                if hasattr(self, "lbl_top"):
+                    self.lbl_top.pack(side=tk.LEFT, padx=(0, 5))
+                    self.entry_top.pack(side=tk.LEFT, padx=(0, 25))
+                    self.lbl_bot.pack_forget()
+                    self.entry_bot.pack_forget()
+                if hasattr(self, "btn_convert"):
+                    self.btn_convert.config(text="💾 LƯU FILE TOP_OUTPUT.CSV CHO MÁY NEODEN YY1")
+            elif not has_top and has_bot:
+                self.notebook.tab(0, state="disabled")
+                self.notebook.tab(1, state="normal")
+                self.notebook.select(1)
+                if hasattr(self, "lbl_top"):
+                    self.lbl_top.pack_forget()
+                    self.entry_top.pack_forget()
+                    self.lbl_bot.pack(side=tk.LEFT, padx=(0, 5))
+                    self.entry_bot.pack(side=tk.LEFT)
+                if hasattr(self, "btn_convert"):
+                    self.btn_convert.config(text="💾 LƯU FILE BOT_OUTPUT.CSV CHO MÁY NEODEN YY1")
+            else:
+                self.notebook.tab(0, state="normal")
+                self.notebook.tab(1, state="normal")
+                if hasattr(self, "lbl_top"):
+                    self.lbl_top.pack(side=tk.LEFT, padx=(0, 5))
+                    self.entry_top.pack(side=tk.LEFT, padx=(0, 25))
+                    self.lbl_bot.pack(side=tk.LEFT, padx=(0, 5))
+                    self.entry_bot.pack(side=tk.LEFT)
+                if hasattr(self, "btn_convert"):
+                    self.btn_convert.config(text="💾 LƯU CẢ 2 FILE (TOP + BOTTOM) CHO MÁY NEODEN YY1")
+
+        if self.origin_type == "BOTTOM_LEFT":
+            origin_str = "📍 Gốc: GÓC DƯỚI BÊN TRÁI (X>=0, Y>=0)"
+        elif self.origin_type == "BOTTOM_RIGHT":
+            origin_str = "📍 Gốc: GÓC DƯỚI BÊN PHẢI (X<=0, Y>=0)"
+        else:
+            origin_str = "⚠️ CẢNH BÁO: GỐC TỌA ĐỘ KHÔNG HỢP LỆ (ở giữa/trong/trên mạch)!"
+
+        if has_top and has_bot:
+            layer_str = f"📦 2 Mặt (TOP: {len(self.top_components)} LK, BOT: {len(self.bot_components)} LK)"
+        elif has_top:
+            layer_str = f"📦 Chỉ có Mặt TOP ({len(self.top_components)} LK)"
+        elif has_bot:
+            layer_str = f"📦 Chỉ có Mặt BOTTOM ({len(self.bot_components)} LK)"
+        else:
+            layer_str = "📦 Chưa có linh kiện nào"
+
+        if hasattr(self, "stats_label"):
+            self.stats_label.config(text=f"{origin_str}  |  {layer_str}")
+
+        if self.origin_type == "INVALID":
+            messagebox.showwarning(
+                "Cảnh Báo Gốc Tọa Độ Không Hợp Lệ",
+                "⚠️ CẢNH BÁO FILE KHÔNG HỢP LỆ:\n\n"
+                "Gốc tọa độ của file hiện tại đang được đặt ở GIỮA MẠCH, TRÊN MẠCH hoặc TRONG MẠCH!\n\n"
+                "📌 Quy chuẩn máy NeoDen YY1:\n"
+                "- Gốc hợp lệ 1: Góc Dưới Bên Trái (toàn bộ X >= 0, Y >= 0)\n"
+                "- Gốc hợp lệ 2: Góc Dưới Bên Phải (toàn bộ X <= 0, Y >= 0)\n\n"
+                "Vui lòng kiểm tra và đặt lại gốc tọa độ chuẩn trong Altium Designer trước khi xuất Pick & Place!"
+            )
             
     def assign_dynamic_feeders(self, comp_list):
         """Gán số khay Feeder tuần tự cho các linh kiện chưa được định trước"""
@@ -1257,6 +1379,10 @@ class NeoDenYY1App:
             self.apply_feeder_assignments_to_components()
         else:
             self.refresh_tables()
+
+    def on_board_width_changed(self):
+        self.recalc_coordinates()
+        self.refresh_tables()
 
     def apply_feeder_assignments_to_components(self):
         if self.auto_match_var.get():
@@ -1326,10 +1452,6 @@ class NeoDenYY1App:
         
         self.notebook.tab(0, text=f"  Mặt TOP ({len(self.top_components)} linh kiện)  ")
         self.notebook.tab(1, text=f"  Mặt BOTTOM ({len(self.bot_components)} linh kiện)  ")
-        
-        top_u = len(set(c["comment"] for c in self.top_components))
-        bot_u = len(set(c["comment"] for c in self.bot_components))
-        self.stats_label.config(text=f"✔ Đã nạp: TOP {len(self.top_components)} pcs ({top_u} loại)  |  BOTTOM {len(self.bot_components)} pcs ({bot_u} loại)  |  Nhấp đúp chuột để sửa 13 thông số")
 
     def get_active_tree_and_list(self):
         if self.notebook.index(self.notebook.select()) == 0:
@@ -1416,11 +1538,13 @@ class NeoDenYY1App:
         return fields
 
     def save_and_export(self):
-        if not self.top_components and not self.bot_components:
+        has_top = bool(self.top_components)
+        has_bot = bool(self.bot_components)
+        if not has_top and not has_bot:
             messagebox.showwarning("Cảnh Báo", "Chưa có dữ liệu để lưu!")
             return
             
-        self.recalc_bottom_coordinates()
+        self.recalc_coordinates()
         try:
             header_str = (
                 "NEODEN,YY1,P&P FILE,,,,,,,,,,\r\n"
@@ -1446,29 +1570,31 @@ class NeoDenYY1App:
                             header_str = "".join(t_lines)
                             break
                             
-            # Lưu TOP
-            top_out_path = os.path.join(self.base_dir, self.top_output_name.get().strip())
-            with open(top_out_path, "w", encoding="utf-8", newline="") as f:
-                f.write(header_str)
-                for c in self.top_components:
-                    line = f"{c['designator']},{c['comment']},{c['footprint']},{c['mid_x']:.2f},{c['mid_y']:.2f},{c['rotation']:.2f},{c['head']},{c['feeder_no']},{c['mount_speed']},{c['pick_height']:.2f},{c['place_height']:.2f},{c['mode']},{c['skip']}\r\n"
-                    f.write(line)
+            report_items = []
+            # Lưu TOP nếu có
+            if has_top:
+                top_out_path = os.path.join(self.base_dir, self.top_output_name.get().strip())
+                with open(top_out_path, "w", encoding="utf-8", newline="") as f:
+                    f.write(header_str)
+                    for c in self.top_components:
+                        line = f"{c['designator']},{c['comment']},{c['footprint']},{c['mid_x']:.2f},{c['mid_y']:.2f},{c['rotation']:.2f},{c['head']},{c['feeder_no']},{c['mount_speed']},{c['pick_height']:.2f},{c['place_height']:.2f},{c['mode']},{c['skip']}\r\n"
+                        f.write(line)
+                report_items.append(f"⭐ Mặt TOP:\n   • Số linh kiện: {len(self.top_components)}\n   • File: {top_out_path}")
                     
-            # Lưu BOT
-            bot_out_path = os.path.join(self.base_dir, self.bot_output_name.get().strip())
-            with open(bot_out_path, "w", encoding="utf-8", newline="") as f:
-                f.write(header_str)
-                for c in self.bot_components:
-                    line = f"{c['designator']},{c['comment']},{c['footprint']},{c['mid_x']:.2f},{c['mid_y']:.2f},{c['rotation']:.2f},{c['head']},{c['feeder_no']},{c['mount_speed']},{c['pick_height']:.2f},{c['place_height']:.2f},{c['mode']},{c['skip']}\r\n"
-                    f.write(line)
+            # Lưu BOT nếu có
+            if has_bot:
+                bot_out_path = os.path.join(self.base_dir, self.bot_output_name.get().strip())
+                with open(bot_out_path, "w", encoding="utf-8", newline="") as f:
+                    f.write(header_str)
+                    for c in self.bot_components:
+                        line = f"{c['designator']},{c['comment']},{c['footprint']},{c['mid_x']:.2f},{c['mid_y']:.2f},{c['rotation']:.2f},{c['head']},{c['feeder_no']},{c['mount_speed']},{c['pick_height']:.2f},{c['place_height']:.2f},{c['mode']},{c['skip']}\r\n"
+                        f.write(line)
+                report_items.append(f"⭐ Mặt BOTTOM:\n   • Số linh kiện: {len(self.bot_components)}\n   • File: {bot_out_path}")
                     
             msg = (
                 f"🎉 ĐÃ LƯU BẢN ĐÃ CHỈNH SỬA CHO MÁY NEODEN YY1!\n\n"
-                f"• Mặt TOP: {len(self.top_components)} linh kiện\n"
-                f"  File: {top_out_path}\n\n"
-                f"• Mặt BOTTOM: {len(self.bot_components)} linh kiện\n"
-                f"  File: {bot_out_path}\n\n"
-                f"Tất cả các thông số chỉnh sửa (Tọa độ, Feeder, Head, Góc, Skip, Tốc độ) đã được lưu chính xác 100%!"
+                + "\n\n".join(report_items)
+                + "\n\nToàn bộ 13 thông số đã chỉnh sửa được lưu chính xác 100%!"
             )
             messagebox.showinfo("Lưu Thành Công", msg)
             

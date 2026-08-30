@@ -210,14 +210,26 @@ pub struct Component {
     pub layer: String,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum OriginTypeRust {
+    Unknown,
+    BottomLeft,
+    BottomRight,
+    Invalid,
+}
+
 struct AppState {
     hwnd: HWND,
     h_splash: HWND,
     h_edit_input: HWND,
     h_edit_top: HWND,
     h_edit_bot: HWND,
+    h_lbl_top: HWND,
+    h_lbl_bot: HWND,
+    h_btn_convert: HWND,
     h_edit_board_width: HWND,
     board_width: f64,
+    origin_type: OriginTypeRust,
     h_list_view: HWND,
     h_status: HWND,
     h_radio_top: HWND,
@@ -246,8 +258,12 @@ static STATE: Mutex<AppState> = Mutex::new(AppState {
     h_edit_input: ptr::null_mut(),
     h_edit_top: ptr::null_mut(),
     h_edit_bot: ptr::null_mut(),
+    h_lbl_top: ptr::null_mut(),
+    h_lbl_bot: ptr::null_mut(),
+    h_btn_convert: ptr::null_mut(),
     h_edit_board_width: ptr::null_mut(),
     board_width: 0.0,
+    origin_type: OriginTypeRust::BottomLeft,
     h_list_view: ptr::null_mut(),
     h_status: ptr::null_mut(),
     h_radio_top: ptr::null_mut(),
@@ -714,21 +730,58 @@ fn is_valid_component_rust(des: &str, cmt: &str) -> bool {
     sort_comps(&mut top_raw);
     sort_comps(&mut bot_raw);
 
+    let origin = detect_origin_type_rust(&top_raw, &bot_raw);
+
     {
         let mut state = STATE.lock().unwrap();
         state.top_components = top_raw;
         state.bot_components = bot_raw;
+        state.origin_type = origin;
     }
 
-    recalc_bottom_coordinates_rust();
+    recalc_coordinates_rust();
+    update_layer_and_origin_ui_rust();
     refresh_list_view();
     true
 }
 
-fn recalc_bottom_coordinates_rust() {
-    let hwnd_bw = {
+fn detect_origin_type_rust(top: &[Component], bot: &[Component]) -> OriginTypeRust {
+    if top.is_empty() && bot.is_empty() {
+        return OriginTypeRust::Unknown;
+    }
+
+    let mut min_x = 1e9f64;
+    let mut max_x = -1e9f64;
+    let mut min_y = 1e9f64;
+    let mut max_y = -1e9f64;
+
+    let mut check_c = |c: &Component| {
+        if c.raw_mid_x < min_x { min_x = c.raw_mid_x; }
+        if c.raw_mid_x > max_x { max_x = c.raw_mid_x; }
+        if c.raw_mid_y < min_y { min_y = c.raw_mid_y; }
+        if c.raw_mid_y > max_y { max_y = c.raw_mid_y; }
+    };
+
+    for c in top { check_c(c); }
+    for c in bot { check_c(c); }
+
+    if min_y < -0.1 {
+        return OriginTypeRust::Invalid;
+    }
+
+    if min_x >= -0.1 {
+        OriginTypeRust::BottomLeft
+    } else if max_x <= 0.1 {
+        OriginTypeRust::BottomRight
+    } else {
+        OriginTypeRust::Invalid
+    }
+}
+
+fn recalc_coordinates_rust() {
+    let (hwnd_bw, origin_type) = {
         let state = STATE.lock().unwrap();
-        state.h_edit_board_width
+        (state.h_edit_board_width, state.origin_type)
     };
     let mut bw_val = 0.0;
     if !hwnd_bw.is_null() {
@@ -744,24 +797,164 @@ fn recalc_bottom_coordinates_rust() {
     let mut state = STATE.lock().unwrap();
     state.board_width = if bw_val > 0.0 { bw_val } else { 0.0 };
     let bw = state.board_width;
-    for c in &mut state.bot_components {
-        if bw > 0.0 {
-            c.mid_x = bw - c.raw_mid_x;
-        } else {
-            c.mid_x = c.raw_mid_x;
+
+    match origin_type {
+        OriginTypeRust::BottomLeft => {
+            for c in &mut state.top_components {
+                c.mid_x = c.raw_mid_x;
+                c.mid_y = c.raw_mid_y;
+            }
+            for c in &mut state.bot_components {
+                if bw > 0.0 {
+                    c.mid_x = bw - c.raw_mid_x;
+                } else {
+                    c.mid_x = c.raw_mid_x;
+                }
+                c.mid_y = c.raw_mid_y;
+            }
         }
-        c.mid_y = c.raw_mid_y;
+        OriginTypeRust::BottomRight => {
+            for c in &mut state.bot_components {
+                c.mid_x = c.raw_mid_x.abs();
+                c.mid_y = c.raw_mid_y;
+            }
+            for c in &mut state.top_components {
+                if bw > 0.0 {
+                    c.mid_x = bw + c.raw_mid_x;
+                } else {
+                    c.mid_x = c.raw_mid_x.abs();
+                }
+                c.mid_y = c.raw_mid_y;
+            }
+        }
+        _ => {
+            for c in &mut state.top_components {
+                c.mid_x = c.raw_mid_x;
+                c.mid_y = c.raw_mid_y;
+            }
+            for c in &mut state.bot_components {
+                c.mid_x = c.raw_mid_x;
+                c.mid_y = c.raw_mid_y;
+            }
+        }
+    }
+}
+
+fn update_layer_and_origin_ui_rust() {
+    let (hwnd, h_top_radio, h_bot_radio, h_lbl_top, h_edit_top, h_lbl_bot, h_edit_bot, h_btn_convert, h_status, origin_type, top_len, bot_len) = {
+        let state = STATE.lock().unwrap();
+        (
+            state.hwnd,
+            state.h_radio_top,
+            state.h_radio_bot,
+            state.h_lbl_top,
+            state.h_edit_top,
+            state.h_lbl_bot,
+            state.h_edit_bot,
+            state.h_btn_convert,
+            state.h_status,
+            state.origin_type,
+            state.top_components.len(),
+            state.bot_components.len(),
+        )
+    };
+
+    let has_top = top_len > 0;
+    let has_bot = bot_len > 0;
+
+    unsafe {
+        if has_top && !has_bot {
+            {
+                let mut state = STATE.lock().unwrap();
+                state.showing_top = true;
+            }
+            SendMessageW(h_top_radio, 0x00F1 /* BM_SETCHECK */, 1 /* BST_CHECKED */, 0);
+            SendMessageW(h_bot_radio, 0x00F1 /* BM_SETCHECK */, 0 /* BST_UNCHECKED */, 0);
+            EnableWindow(h_top_radio, 1);
+            EnableWindow(h_bot_radio, 0);
+            SetWindowTextW(h_top_radio, to_wstr("Mặt TOP").as_ptr());
+            SetWindowTextW(h_bot_radio, to_wstr("Mặt BOTTOM (0 LK)").as_ptr());
+
+            if !h_lbl_top.is_null() { ShowWindow(h_lbl_top, 1 /* SW_SHOW */); }
+            if !h_edit_top.is_null() { ShowWindow(h_edit_top, 1 /* SW_SHOW */); }
+            if !h_lbl_bot.is_null() { ShowWindow(h_lbl_bot, 0 /* SW_HIDE */); }
+            if !h_edit_bot.is_null() { ShowWindow(h_edit_bot, 0 /* SW_HIDE */); }
+            if !h_btn_convert.is_null() { SetWindowTextW(h_btn_convert, to_wstr("💾 LƯU FILE TOP_OUTPUT.CSV CHO MÁY NEODEN YY1").as_ptr()); }
+        } else if !has_top && has_bot {
+            {
+                let mut state = STATE.lock().unwrap();
+                state.showing_top = false;
+            }
+            SendMessageW(h_top_radio, 0x00F1 /* BM_SETCHECK */, 0 /* BST_UNCHECKED */, 0);
+            SendMessageW(h_bot_radio, 0x00F1 /* BM_SETCHECK */, 1 /* BST_CHECKED */, 0);
+            EnableWindow(h_top_radio, 0);
+            EnableWindow(h_bot_radio, 1);
+            SetWindowTextW(h_top_radio, to_wstr("Mặt TOP (0 LK)").as_ptr());
+            SetWindowTextW(h_bot_radio, to_wstr("Mặt BOTTOM").as_ptr());
+
+            if !h_lbl_top.is_null() { ShowWindow(h_lbl_top, 0 /* SW_HIDE */); }
+            if !h_edit_top.is_null() { ShowWindow(h_edit_top, 0 /* SW_HIDE */); }
+            if !h_lbl_bot.is_null() { ShowWindow(h_lbl_bot, 1 /* SW_SHOW */); }
+            if !h_edit_bot.is_null() { ShowWindow(h_edit_bot, 1 /* SW_SHOW */); }
+            if !h_btn_convert.is_null() { SetWindowTextW(h_btn_convert, to_wstr("💾 LƯU FILE BOT_OUTPUT.CSV CHO MÁY NEODEN YY1").as_ptr()); }
+        } else if has_top && has_bot {
+            EnableWindow(h_top_radio, 1);
+            EnableWindow(h_bot_radio, 1);
+            SetWindowTextW(h_top_radio, to_wstr("Mặt TOP").as_ptr());
+            SetWindowTextW(h_bot_radio, to_wstr("Mặt BOTTOM").as_ptr());
+
+            if !h_lbl_top.is_null() { ShowWindow(h_lbl_top, 1 /* SW_SHOW */); }
+            if !h_edit_top.is_null() { ShowWindow(h_edit_top, 1 /* SW_SHOW */); }
+            if !h_lbl_bot.is_null() { ShowWindow(h_lbl_bot, 1 /* SW_SHOW */); }
+            if !h_edit_bot.is_null() { ShowWindow(h_edit_bot, 1 /* SW_SHOW */); }
+            if !h_btn_convert.is_null() { SetWindowTextW(h_btn_convert, to_wstr("💾 LƯU CẢ 2 FILE (TOP + BOTTOM) CHO MÁY NEODEN YY1").as_ptr()); }
+        }
+
+        let origin_str = match origin_type {
+            OriginTypeRust::BottomLeft => "📍 Gốc: GÓC DƯỚI BÊN TRÁI (X>=0, Y>=0)",
+            OriginTypeRust::BottomRight => "📍 Gốc: GÓC DƯỚI BÊN PHẢI (X<=0, Y>=0)",
+            _ => "⚠️ CẢNH BÁO: GỐC TỌA ĐỘ KHÔNG HỢP LỆ (ở giữa/trong/trên mạch)!",
+        };
+
+        let status_txt = if has_top && has_bot {
+            format!("{} | 📦 2 Mặt (TOP: {} LK, BOT: {} LK)", origin_str, top_len, bot_len)
+        } else if has_top {
+            format!("{} | 📦 Chỉ có Mặt TOP ({} LK)", origin_str, top_len)
+        } else if has_bot {
+            format!("{} | 📦 Chỉ có Mặt BOTTOM ({} LK)", origin_str, bot_len)
+        } else {
+            format!("{} | 📦 Chưa có linh kiện nào", origin_str)
+        };
+
+        if !h_status.is_null() {
+            SetWindowTextW(h_status, to_wstr(&status_txt).as_ptr());
+        }
+
+        if origin_type == OriginTypeRust::Invalid {
+            let warn_msg = to_wstr(
+                "⚠️ CẢNH BÁO FILE KHÔNG HỢP LỆ:\n\n\
+                Gốc tọa độ của file hiện tại đang được đặt ở GIỮA MẠCH, TRÊN MẠCH hoặc TRONG MẠCH!\n\n\
+                📌 Quy chuẩn máy NeoDen YY1:\n\
+                - Gốc hợp lệ 1: Góc Dưới Bên Trái (toàn bộ X >= 0, Y >= 0)\n\
+                - Gốc hợp lệ 2: Góc Dưới Bên Phải (toàn bộ X <= 0, Y >= 0)\n\n\
+                Vui lòng kiểm tra và đặt lại gốc tọa độ chuẩn trong Altium Designer trước khi xuất Pick & Place!"
+            );
+            MessageBoxW(hwnd, warn_msg.as_ptr(), to_wstr("Cảnh Báo Gốc Tọa Độ Không Hợp Lệ").as_ptr(), 0x0030 /* MB_ICONWARNING */);
+        }
     }
 }
 
 fn save_outputs() {
-    recalc_bottom_coordinates_rust();
+    recalc_coordinates_rust();
     let (hwnd, h_top, h_bot, top_comps, bot_comps) = {
         let state = STATE.lock().unwrap();
         (state.hwnd, state.h_edit_top, state.h_edit_bot, state.top_components.clone(), state.bot_components.clone())
     };
 
-    if top_comps.is_empty() && bot_comps.is_empty() {
+    let has_top = !top_comps.is_empty();
+    let has_bot = !bot_comps.is_empty();
+
+    if !has_top && !has_bot {
         unsafe {
             MessageBoxW(hwnd, to_wstr("Chưa có dữ liệu để lưu!").as_ptr(), to_wstr("Thông Báo").as_ptr(), 0x0030);
         }
@@ -771,8 +964,8 @@ fn save_outputs() {
     let mut w_top = [0u16; 260];
     let mut w_bot = [0u16; 260];
     unsafe {
-        GetWindowTextW(h_top, w_top.as_mut_ptr(), 260);
-        GetWindowTextW(h_bot, w_bot.as_mut_ptr(), 260);
+        if !h_top.is_null() { GetWindowTextW(h_top, w_top.as_mut_ptr(), 260); }
+        if !h_bot.is_null() { GetWindowTextW(h_bot, w_bot.as_mut_ptr(), 260); }
     }
     let top_name = from_wstr(w_top.as_ptr());
     let bot_name = from_wstr(w_bot.as_ptr());
@@ -796,19 +989,37 @@ fn save_outputs() {
         }
     };
 
-    let ok_top = write_file(&top_name, &top_comps);
-    let ok_bot = write_file(&bot_name, &bot_comps);
+    let mut ok_top = true;
+    if has_top {
+        ok_top = write_file(&top_name, &top_comps);
+    }
+    let mut ok_bot = true;
+    if has_bot {
+        ok_bot = write_file(&bot_name, &bot_comps);
+    }
 
     if ok_top && ok_bot {
+        let mut report_msg = String::new();
+        if has_top && has_bot {
+            report_msg = format!("⭐ Mặt TOP:\n   • Số linh kiện: {}\n   • File: {}\n\n⭐ Mặt BOTTOM:\n   • Số linh kiện: {}\n   • File: {}\n\n", top_comps.len(), top_name, bot_comps.len(), bot_name);
+        } else if has_top {
+            report_msg = format!("⭐ Mặt TOP:\n   • Số linh kiện: {}\n   • File: {}\n\n", top_comps.len(), top_name);
+        } else if has_bot {
+            report_msg = format!("⭐ Mặt BOTTOM:\n   • Số linh kiện: {}\n   • File: {}\n\n", bot_comps.len(), bot_name);
+        }
+
         let msg = format!(
-            "ĐÃ LƯU FILE CHỈNH SỬA CHO MÁY NEODEN YY1!\n\n• Mặt TOP: {} linh kiện -> {}\n• Mặt BOTTOM: {} linh kiện -> {}\n\nToàn bộ 13 thông số đã chỉnh sửa được lưu chính xác 100%.\nBạn có muốn mở thư mục chứa file vừa lưu?",
-            top_comps.len(), top_name,
-            bot_comps.len(), bot_name
+            "🎉 ĐÃ LƯU FILE CHỈNH SỬA CHO MÁY NEODEN YY1!\n\n{}Toàn bộ 13 thông số đã chỉnh sửa được lưu chính xác 100%.\nBạn có muốn mở thư mục chứa file vừa lưu?",
+            report_msg
         );
         unsafe {
             if MessageBoxW(hwnd, to_wstr(&msg).as_ptr(), to_wstr("Lưu Thành Công").as_ptr(), 0x0040 | 0x0004) == 6 {
                 ShellExecuteW(ptr::null_mut(), to_wstr("open").as_ptr(), to_wstr(".").as_ptr(), ptr::null(), ptr::null(), 1);
             }
+        }
+    } else {
+        unsafe {
+            MessageBoxW(hwnd, to_wstr("Lỗi ghi file!").as_ptr(), to_wstr("Lỗi").as_ptr(), 0x0010);
         }
     }
 }
@@ -1969,14 +2180,8 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                         !state.h_list_view.is_null() && !state.h_edit_board_width.is_null()
                     };
                     if is_ready {
-                        recalc_bottom_coordinates_rust();
-                        let is_bot = {
-                            let state = STATE.lock().unwrap();
-                            !state.showing_top
-                        };
-                        if is_bot {
-                            refresh_list_view();
-                        }
+                        recalc_coordinates_rust();
+                        refresh_list_view();
                     }
                 }
                 401 => { // Radio TOP
@@ -2048,49 +2253,38 @@ fn main() {
         let hinst: HINSTANCE = ptr::null_mut();
 
         // Splash class
-        let splash_class_name = to_wstr("NeoDenYY1RustSplash");
-        let splash_wc = WNDCLASSEXW {
-            cb_size: std::mem::size_of::<WNDCLASSEXW>() as u32,
-            style: 0x0001 | 0x0002,
-            lpfn_wnd_proc: splash_proc,
-            cb_cls_extra: 0,
-            cb_wnd_extra: 0,
-            h_instance: hinst,
-            h_icon: ptr::null_mut(),
-            h_cursor: LoadCursorW(ptr::null_mut(), 32512 as *const _),
-            hbr_background: 16 as *mut _,
-            lpsz_menu_name: ptr::null(),
-            lpsz_class_name: splash_class_name.as_ptr(),
-            h_icon_sm: ptr::null_mut(),
-        };
-        RegisterClassExW(&splash_wc);
+        let splash_class_name = to_wstr("NeoDenYY1SplashRust");
+        let mut wc_splash: WNDCLASSEXW = std::mem::zeroed();
+        wc_splash.cb_size = std::mem::size_of::<WNDCLASSEXW>() as u32;
+        wc_splash.style = 0x0002 | 0x0001;
+        wc_splash.lpfn_wnd_proc = splash_proc;
+        wc_splash.h_instance = hinst;
+        wc_splash.h_cursor = LoadCursorW(ptr::null_mut(), 32512 as *const u16);
+        wc_splash.lpsz_class_name = splash_class_name.as_ptr();
+        RegisterClassExW(&wc_splash);
 
         // Main class
-        let main_class_name = to_wstr("NeoDenYY1RustGUI");
+        let main_class_name = to_wstr("NeoDenYY1GUIRust");
+        let mut wc_main: WNDCLASSEXW = std::mem::zeroed();
+        wc_main.cb_size = std::mem::size_of::<WNDCLASSEXW>() as u32;
+        wc_main.style = 0x0002 | 0x0001;
+        wc_main.lpfn_wnd_proc = wnd_proc;
+        wc_main.h_instance = hinst;
+        wc_main.h_cursor = LoadCursorW(ptr::null_mut(), 32512 as *const u16);
+        wc_main.hbr_background = (15 + 1) as *mut _; // COLOR_BTNFACE + 1
+        wc_main.lpsz_class_name = main_class_name.as_ptr();
 
-        let mut h_icon_big = LoadImageW(hinst, 1 as *const _, 1, 32, 32, 0);
+        let mut h_icon_big = LoadImageW(hinst, 1 as *const u16, 1 /* IMAGE_ICON */, 32, 32, 0);
         if h_icon_big.is_null() { h_icon_big = LoadImageW(ptr::null_mut(), to_wstr("assets/app_icon.ico").as_ptr(), 1, 32, 32, 0x0010); }
         if h_icon_big.is_null() { h_icon_big = LoadImageW(ptr::null_mut(), to_wstr("app_icon.ico").as_ptr(), 1, 32, 32, 0x0010); }
 
-        let mut h_icon_sm = LoadImageW(hinst, 1 as *const _, 1, 16, 16, 0);
+        let mut h_icon_sm = LoadImageW(hinst, 1 as *const u16, 1, 16, 16, 0);
         if h_icon_sm.is_null() { h_icon_sm = LoadImageW(ptr::null_mut(), to_wstr("assets/app_icon.ico").as_ptr(), 1, 16, 16, 0x0010); }
         if h_icon_sm.is_null() { h_icon_sm = LoadImageW(ptr::null_mut(), to_wstr("app_icon.ico").as_ptr(), 1, 16, 16, 0x0010); }
 
-        let wc = WNDCLASSEXW {
-            cb_size: std::mem::size_of::<WNDCLASSEXW>() as u32,
-            style: 0x0001 | 0x0002,
-            lpfn_wnd_proc: wnd_proc,
-            cb_cls_extra: 0,
-            cb_wnd_extra: 0,
-            h_instance: hinst,
-            h_icon: h_icon_big,
-            h_cursor: LoadCursorW(ptr::null_mut(), 32512 as *const _),
-            hbr_background: 16 as *mut _,
-            lpsz_menu_name: ptr::null(),
-            lpsz_class_name: main_class_name.as_ptr(),
-            h_icon_sm: h_icon_sm,
-        };
-        RegisterClassExW(&wc);
+        wc_main.h_icon = h_icon_big;
+        wc_main.h_icon_sm = h_icon_sm;
+        RegisterClassExW(&wc_main);
 
         let screen_w = GetSystemMetrics(0);
         let screen_h = GetSystemMetrics(1);
@@ -2100,8 +2294,8 @@ fn main() {
         let win_y = (screen_h - win_h) / 2;
 
         let hwnd = CreateWindowExW(
-            0, main_class_name.as_ptr(), to_wstr("NeoDen YY1 SMT Pick & Place File Converter (Rust GUI) - ChipXa").as_ptr(),
-            0x00CF0000 & !0x00010000 & !0x00040000,
+            0, main_class_name.as_ptr(), to_wstr("NeoDen YY1 SMT Pick & Place File Converter Pro (Rust Edition) - ChipXa").as_ptr(),
+            (0x00CF0000 & !0x00010000 & !0x00040000) | 0x00000000,
             win_x, win_y, win_w, win_h, ptr::null_mut(), ptr::null_mut(), hinst, ptr::null_mut()
         );
 
@@ -2116,7 +2310,7 @@ fn main() {
 
         init_default_feeder_matrix_rust();
 
-        let font_normal = CreateFontW(15, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
+        let font_normal = CreateFontW(14, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
         let font_bold = CreateFontW(15, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
 
         let btn_feeder = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC").as_ptr(), 0x50000000, 1050, 8, 290, 32, hwnd, 301 as *mut _, hinst, ptr::null_mut());
@@ -2216,6 +2410,9 @@ fn main() {
             state.h_list_view = h_list_view;
             state.h_edit_top = h_edit_top;
             state.h_edit_bot = h_edit_bot;
+            state.h_lbl_top = lbl_top;
+            state.h_lbl_bot = lbl_bot;
+            state.h_btn_convert = btn_convert;
         }
 
         // Khởi động giao diện sạch sẽ, người dùng tự chọn file cần mở

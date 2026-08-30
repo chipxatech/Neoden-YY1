@@ -594,3 +594,31 @@ bool auto_detect_altium_file(char* out_path, size_t out_path_size) {
     }
     return false;
 }
+
+OriginTypeC detect_origin_type_c(const ComponentList* list) {
+    if (!list || list->count == 0) return ORIGIN_C_UNKNOWN;
+
+    double min_x = 1e9, max_x = -1e9;
+    double min_y = 1e9, max_y = -1e9;
+
+    for (size_t i = 0; i < list->count; ++i) {
+        double x = list->items[i].raw_mid_x;
+        double y = list->items[i].raw_mid_y;
+        if (x < min_x) min_x = x;
+        if (x > max_x) max_x = x;
+        if (y < min_y) min_y = y;
+        if (y > max_y) max_y = y;
+    }
+
+    if (min_y < -0.1) {
+        return ORIGIN_C_INVALID;
+    }
+
+    if (min_x >= -0.1) {
+        return ORIGIN_C_BOTTOM_LEFT;
+    } else if (max_x <= 0.1) {
+        return ORIGIN_C_BOTTOM_RIGHT;
+    } else {
+        return ORIGIN_C_INVALID;
+    }
+}

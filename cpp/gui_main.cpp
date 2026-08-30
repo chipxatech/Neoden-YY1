@@ -51,6 +51,13 @@ struct FeederSlot {
     int speed = 100;
 };
 
+enum OriginType {
+    ORIGIN_UNKNOWN = 0,
+    ORIGIN_BOTTOM_LEFT = 1,   // Gốc dưới bên trái: toàn bộ X >= 0, Y >= 0
+    ORIGIN_BOTTOM_RIGHT = 2,  // Gốc dưới bên phải: toàn bộ X <= 0, Y >= 0
+    ORIGIN_INVALID = 3        // Không hợp lệ: ở giữa/trong/trên mạch
+};
+
 // Global variables
 HINSTANCE g_hInst = NULL;
 HWND g_hWnd = NULL;
@@ -58,6 +65,9 @@ HWND g_hSplash = NULL;
 HWND g_hEditInput = NULL;
 HWND g_hEditTop = NULL;
 HWND g_hEditBot = NULL;
+HWND g_hLblTop = NULL;
+HWND g_hLblBot = NULL;
+HWND g_hBtnConvert = NULL;
 HWND g_hEditBoardWidth = NULL;
 HWND g_hListView = NULL;
 HWND g_hStatus = NULL;
@@ -66,6 +76,7 @@ HWND g_hRadioBot = NULL;
 HWND g_hChkAutoMatch = NULL;
 bool g_auto_match_feeder = true;
 double g_board_width = 0.0;
+OriginType g_origin_type = ORIGIN_BOTTOM_LEFT;
 Gdiplus::Image* g_pLogoImage = NULL;
 ULONG_PTR g_gdiplusToken = 0;
 HFONT g_hFontTitle = NULL;
@@ -629,12 +640,45 @@ static bool isValidComponentCpp(const std::wstring& des, const std::wstring& cmt
     std::sort(g_top_components.begin(), g_top_components.end(), sort_fn);
     std::sort(g_bot_components.begin(), g_bot_components.end(), sort_fn);
 
-    recalcBottomCoordinates();
+    g_origin_type = detectOriginType();
+    recalcCoordinates();
+    updateLayerAndOriginUI();
     refreshListView();
     return true;
 }
 
-static void recalcBottomCoordinates() {
+static OriginType detectOriginType() {
+    if (g_top_components.empty() && g_bot_components.empty()) return ORIGIN_UNKNOWN;
+
+    double min_x = 1e9, max_x = -1e9;
+    double min_y = 1e9, max_y = -1e9;
+
+    auto check_comp = [&](const Component& c) {
+        if (c.raw_mid_x < min_x) min_x = c.raw_mid_x;
+        if (c.raw_mid_x > max_x) max_x = c.raw_mid_x;
+        if (c.raw_mid_y < min_y) min_y = c.raw_mid_y;
+        if (c.raw_mid_y > max_y) max_y = c.raw_mid_y;
+    };
+
+    for (const auto& c : g_top_components) check_comp(c);
+    for (const auto& c : g_bot_components) check_comp(c);
+
+    // Trục Y: toàn bộ bo mạch phải ở nửa dương (cho phép sai số biên footprint -0.1mm)
+    if (min_y < -0.1) {
+        return ORIGIN_INVALID; // Gốc tọa độ ở trên hoặc ở giữa mạch theo trục Y
+    }
+
+    // Trục X:
+    if (min_x >= -0.1) {
+        return ORIGIN_BOTTOM_LEFT; // Toàn bộ tọa độ X mang dấu dương -> Gốc góc dưới bên trái
+    } else if (max_x <= 0.1) {
+        return ORIGIN_BOTTOM_RIGHT; // Toàn bộ tọa độ X mang dấu âm -> Gốc góc dưới bên phải
+    } else {
+        return ORIGIN_INVALID; // Có cả X âm và X dương -> Gốc tọa độ đặt ở giữa/trong mạch
+    }
+}
+
+static void recalcCoordinates() {
     g_board_width = 0.0;
     if (g_hEditBoardWidth) {
         wchar_t buf[64] = {0};
@@ -650,27 +694,147 @@ static void recalcBottomCoordinates() {
             }
         }
     }
-    for (auto& c : g_bot_components) {
-        if (g_board_width > 0.0) {
-            c.mid_x = g_board_width - c.raw_mid_x;
-        } else {
+
+    if (g_origin_type == ORIGIN_BOTTOM_LEFT) {
+        // Gốc Góc Dưới Bên Trái (Toàn bộ X >= 0):
+        // Mặt TOP giữ nguyên
+        for (auto& c : g_top_components) {
             c.mid_x = c.raw_mid_x;
+            c.mid_y = c.raw_mid_y;
         }
-        c.mid_y = c.raw_mid_y;
+        // Mặt BOTTOM: Lấy Chiều Rộng Bo W - X (nếu W > 0)
+        for (auto& c : g_bot_components) {
+            if (g_board_width > 0.0) {
+                c.mid_x = g_board_width - c.raw_mid_x;
+            } else {
+                c.mid_x = c.raw_mid_x;
+            }
+            c.mid_y = c.raw_mid_y;
+        }
+    } else if (g_origin_type == ORIGIN_BOTTOM_RIGHT) {
+        // Gốc Góc Dưới Bên Phải (Toàn bộ raw_mid_x <= 0):
+        // Mặt BOTTOM giữ nguyên (dương hóa |X|)
+        for (auto& c : g_bot_components) {
+            c.mid_x = std::fabs(c.raw_mid_x);
+            c.mid_y = c.raw_mid_y;
+        }
+        // Mặt TOP: Lấy W + raw_mid_x (tức là W - |raw_mid_x|)
+        for (auto& c : g_top_components) {
+            if (g_board_width > 0.0) {
+                c.mid_x = g_board_width + c.raw_mid_x;
+            } else {
+                c.mid_x = std::fabs(c.raw_mid_x);
+            }
+            c.mid_y = c.raw_mid_y;
+        }
+    } else {
+        // ORIGIN_INVALID hoặc UNKNOWN: giữ nguyên
+        for (auto& c : g_top_components) {
+            c.mid_x = c.raw_mid_x;
+            c.mid_y = c.raw_mid_y;
+        }
+        for (auto& c : g_bot_components) {
+            c.mid_x = c.raw_mid_x;
+            c.mid_y = c.raw_mid_y;
+        }
+    }
+}
+
+static void updateLayerAndOriginUI() {
+    bool has_top = !g_top_components.empty();
+    bool has_bot = !g_bot_components.empty();
+
+    if (has_top && !has_bot) {
+        g_showing_top = true;
+        SendMessageW(g_hRadioTop, BM_SETCHECK, BST_CHECKED, 0);
+        SendMessageW(g_hRadioBot, BM_SETCHECK, BST_UNCHECKED, 0);
+        EnableWindow(g_hRadioTop, TRUE);
+        EnableWindow(g_hRadioBot, FALSE);
+        SetWindowTextW(g_hRadioTop, L"Mặt TOP");
+        SetWindowTextW(g_hRadioBot, L"Mặt BOTTOM (0 LK)");
+
+        if (g_hLblTop) ShowWindow(g_hLblTop, SW_SHOW);
+        if (g_hEditTop) ShowWindow(g_hEditTop, SW_SHOW);
+        if (g_hLblBot) ShowWindow(g_hLblBot, SW_HIDE);
+        if (g_hEditBot) ShowWindow(g_hEditBot, SW_HIDE);
+        if (g_hBtnConvert) SetWindowTextW(g_hBtnConvert, L"💾 LƯU FILE TOP_OUTPUT.CSV CHO MÁY NEODEN YY1");
+    } else if (!has_top && has_bot) {
+        g_showing_top = false;
+        SendMessageW(g_hRadioTop, BM_SETCHECK, BST_UNCHECKED, 0);
+        SendMessageW(g_hRadioBot, BM_SETCHECK, BST_CHECKED, 0);
+        EnableWindow(g_hRadioTop, FALSE);
+        EnableWindow(g_hRadioBot, TRUE);
+        SetWindowTextW(g_hRadioTop, L"Mặt TOP (0 LK)");
+        SetWindowTextW(g_hRadioBot, L"Mặt BOTTOM");
+
+        if (g_hLblTop) ShowWindow(g_hLblTop, SW_HIDE);
+        if (g_hEditTop) ShowWindow(g_hEditTop, SW_HIDE);
+        if (g_hLblBot) ShowWindow(g_hLblBot, SW_SHOW);
+        if (g_hEditBot) ShowWindow(g_hEditBot, SW_SHOW);
+        if (g_hBtnConvert) SetWindowTextW(g_hBtnConvert, L"💾 LƯU FILE BOT_OUTPUT.CSV CHO MÁY NEODEN YY1");
+    } else if (has_top && has_bot) {
+        EnableWindow(g_hRadioTop, TRUE);
+        EnableWindow(g_hRadioBot, TRUE);
+        SetWindowTextW(g_hRadioTop, L"Mặt TOP");
+        SetWindowTextW(g_hRadioBot, L"Mặt BOTTOM");
+
+        if (g_hLblTop) ShowWindow(g_hLblTop, SW_SHOW);
+        if (g_hEditTop) ShowWindow(g_hEditTop, SW_SHOW);
+        if (g_hLblBot) ShowWindow(g_hLblBot, SW_SHOW);
+        if (g_hEditBot) ShowWindow(g_hEditBot, SW_SHOW);
+        if (g_hBtnConvert) SetWindowTextW(g_hBtnConvert, L"💾 LƯU CẢ 2 FILE (TOP + BOTTOM) CHO MÁY NEODEN YY1");
+    }
+
+    // Nhãn trạng thái
+    std::wstring originStr;
+    if (g_origin_type == ORIGIN_BOTTOM_LEFT) {
+        originStr = L"📍 Gốc: GÓC DƯỚI BÊN TRÁI (X>=0, Y>=0)";
+    } else if (g_origin_type == ORIGIN_BOTTOM_RIGHT) {
+        originStr = L"📍 Gốc: GÓC DƯỚI BÊN PHẢI (X<=0, Y>=0)";
+    } else {
+        originStr = L"⚠️ CẢNH BÁO: GỐC TỌA ĐỘ KHÔNG HỢP LỆ (ở giữa/trong/trên mạch)!";
+    }
+
+    std::wstring layerStr;
+    if (has_top && has_bot) {
+        layerStr = L"📦 2 Mặt (TOP: " + std::to_wstring(g_top_components.size()) + L" LK, BOT: " + std::to_wstring(g_bot_components.size()) + L" LK)";
+    } else if (has_top) {
+        layerStr = L"📦 Chỉ có Mặt TOP (" + std::to_wstring(g_top_components.size()) + L" LK)";
+    } else if (has_bot) {
+        layerStr = L"📦 Chỉ có Mặt BOTTOM (" + std::to_wstring(g_bot_components.size()) + L" LK)";
+    }
+
+    wchar_t statusMsg[512];
+    swprintf(statusMsg, 512, L"%ls | %ls", originStr.c_str(), layerStr.c_str());
+    if (g_hStatus) SetWindowTextW(g_hStatus, statusMsg);
+
+    if (g_origin_type == ORIGIN_INVALID) {
+        MessageBoxW(g_hWnd, 
+            L"⚠️ CẢNH BÁO FILE KHÔNG HỢP LỆ:\n\n"
+            L"Gốc tọa độ của file hiện tại đang được đặt ở GIỮA MẠCH, TRÊN MẠCH hoặc TRONG MẠCH!\n\n"
+            L"📌 Quy chuẩn máy NeoDen YY1:\n"
+            L"- Gốc hợp lệ 1: Góc Dưới Bên Trái (toàn bộ X >= 0, Y >= 0)\n"
+            L"- Gốc hợp lệ 2: Góc Dưới Bên Phải (toàn bộ X <= 0, Y >= 0)\n\n"
+            L"Vui lòng kiểm tra và đặt lại gốc tọa độ chuẩn trong Altium Designer trước khi xuất Pick & Place!",
+            L"Cảnh Báo Gốc Tọa Độ Không Hợp Lệ",
+            MB_ICONWARNING);
     }
 }
 
 void doSaveAndExport() {
-    if (g_top_components.empty() && g_bot_components.empty()) {
+    bool has_top = !g_top_components.empty();
+    bool has_bot = !g_bot_components.empty();
+
+    if (!has_top && !has_bot) {
         MessageBoxW(g_hWnd, L"Chưa có dữ liệu để lưu!", L"Thông Báo", MB_ICONWARNING);
         return;
     }
 
-    recalcBottomCoordinates();
+    recalcCoordinates();
 
     wchar_t topName[256] = {0}, botName[256] = {0};
-    GetWindowTextW(g_hEditTop, topName, 256);
-    GetWindowTextW(g_hEditBot, botName, 256);
+    if (g_hEditTop) GetWindowTextW(g_hEditTop, topName, 256);
+    if (g_hEditBot) GetWindowTextW(g_hEditBot, botName, 256);
 
     std::string headerStr = EMBEDDED_HEADER;
     std::ifstream tf("0603Demo.csv", std::ios::binary);
@@ -686,64 +850,70 @@ void doSaveAndExport() {
         }
     }
 
-    // Xuất TOP
-    std::ofstream outTop(ws2s(topName), std::ios::binary);
-    if (outTop.is_open()) {
-        outTop << headerStr;
-        outTop << std::fixed << std::setprecision(2);
-        for (const auto& c : g_top_components) {
-            outTop << ws2s(c.designator) << ","
-                   << ws2s(c.comment) << ","
-                   << ws2s(c.footprint) << ","
-                   << c.mid_x << ","
-                   << c.mid_y << ","
-                   << c.rotation << ","
-                   << c.head << ","
-                   << c.feeder_no << ","
-                   << c.mount_speed << ","
-                   << c.pick_height << ","
-                   << c.place_height << ","
-                   << c.mode << ","
-                   << c.skip << "\r\n";
+    int saved_count = 0;
+    std::wstring reportMsg;
+
+    // Xuất TOP nếu có
+    if (has_top) {
+        std::ofstream outTop(ws2s(topName), std::ios::binary);
+        if (outTop.is_open()) {
+            outTop << headerStr;
+            outTop << std::fixed << std::setprecision(2);
+            for (const auto& c : g_top_components) {
+                outTop << ws2s(c.designator) << ","
+                       << ws2s(c.comment) << ","
+                       << ws2s(c.footprint) << ","
+                       << c.mid_x << ","
+                       << c.mid_y << ","
+                       << c.rotation << ","
+                       << c.head << ","
+                       << c.feeder_no << ","
+                       << c.mount_speed << ","
+                       << c.pick_height << ","
+                       << c.place_height << ","
+                       << c.mode << ","
+                       << c.skip << "\r\n";
+            }
+            outTop.close();
+            saved_count++;
+            reportMsg += L"⭐ Mặt TOP:\n   • Số linh kiện: " + std::to_wstring(g_top_components.size()) + L"\n   • File: " + topName + L"\n\n";
         }
-        outTop.close();
     }
 
-    // Xuất BOT
-    std::ofstream outBot(ws2s(botName), std::ios::binary);
-    if (outBot.is_open()) {
-        outBot << headerStr;
-        outBot << std::fixed << std::setprecision(2);
-        for (const auto& c : g_bot_components) {
-            outBot << ws2s(c.designator) << ","
-                   << ws2s(c.comment) << ","
-                   << ws2s(c.footprint) << ","
-                   << c.mid_x << ","
-                   << c.mid_y << ","
-                   << c.rotation << ","
-                   << c.head << ","
-                   << c.feeder_no << ","
-                   << c.mount_speed << ","
-                   << c.pick_height << ","
-                   << c.place_height << ","
-                   << c.mode << ","
-                   << c.skip << "\r\n";
+    // Xuất BOT nếu có
+    if (has_bot) {
+        std::ofstream outBot(ws2s(botName), std::ios::binary);
+        if (outBot.is_open()) {
+            outBot << headerStr;
+            outBot << std::fixed << std::setprecision(2);
+            for (const auto& c : g_bot_components) {
+                outBot << ws2s(c.designator) << ","
+                       << ws2s(c.comment) << ","
+                       << ws2s(c.footprint) << ","
+                       << c.mid_x << ","
+                       << c.mid_y << ","
+                       << c.rotation << ","
+                       << c.head << ","
+                       << c.feeder_no << ","
+                       << c.mount_speed << ","
+                       << c.pick_height << ","
+                       << c.place_height << ","
+                       << c.mode << ","
+                       << c.skip << "\r\n";
+            }
+            outBot.close();
+            saved_count++;
+            reportMsg += L"⭐ Mặt BOTTOM:\n   • Số linh kiện: " + std::to_wstring(g_bot_components.size()) + L"\n   • File: " + botName + L"\n\n";
         }
-        outBot.close();
     }
 
-    wchar_t msg[512];
-    swprintf(msg, 512, 
-        L"🎉 ĐÃ LƯU FILE CHỈNH SỬA CHO MÁY NEODEN YY1!\n\n"
-        L"⭐ Mặt TOP:\n   • Số linh kiện: %zu\n   • File: %s\n\n"
-        L"⭐ Mặt BOTTOM:\n   • Số linh kiện: %zu\n   • File: %s\n\n"
-        L"Toàn bộ 13 thông số đã chỉnh sửa được lưu chính xác 100%.\nBạn có muốn mở thư mục chứa file vừa lưu?",
-        g_top_components.size(), topName,
-        g_bot_components.size(), botName
-    );
-
-    if (MessageBoxW(g_hWnd, msg, L"Lưu Thành Công", MB_ICONINFORMATION | MB_YESNO) == IDYES) {
-        ShellExecuteW(NULL, L"open", L".", NULL, NULL, SW_SHOWNORMAL);
+    if (saved_count > 0) {
+        std::wstring msg = L"🎉 ĐÃ LƯU FILE CHỈNH SỬA CHO MÁY NEODEN YY1!\n\n" + reportMsg + L"Toàn bộ 13 thông số đã chỉnh sửa được lưu chính xác 100%.\nBạn có muốn mở thư mục chứa file vừa lưu?";
+        if (MessageBoxW(g_hWnd, msg.c_str(), L"Lưu Thành Công", MB_ICONINFORMATION | MB_YESNO) == IDYES) {
+            ShellExecuteW(NULL, L"open", L".", NULL, NULL, SW_SHOWNORMAL);
+        }
+    } else {
+        MessageBoxW(g_hWnd, L"Lỗi ghi file!", L"Lỗi", MB_ICONERROR);
     }
 }
 
@@ -1487,18 +1657,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         HWND hGrp3 = CreateWindowExW(0, L"BUTTON", L" 3. Luu / Xuat File Sau Khi Chinh Sua ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 625, 1320, 135, hWnd, NULL, g_hInst, NULL);
         SendMessageW(hGrp3, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        HWND hLblTop = CreateWindowExW(0, L"STATIC", L"Ten file TOP:", WS_CHILD | WS_VISIBLE, 35, 652, 90, 20, hWnd, NULL, g_hInst, NULL);
-        SendMessageW(hLblTop, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
+        g_hLblTop = CreateWindowExW(0, L"STATIC", L"Ten file TOP:", WS_CHILD | WS_VISIBLE, 35, 652, 90, 20, hWnd, NULL, g_hInst, NULL);
+        SendMessageW(g_hLblTop, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
         g_hEditTop = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"Top_Output.csv", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 130, 648, 250, 26, hWnd, NULL, g_hInst, NULL);
         SendMessageW(g_hEditTop, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
-        HWND hLblBot = CreateWindowExW(0, L"STATIC", L"Ten file BOTTOM:", WS_CHILD | WS_VISIBLE, 420, 652, 120, 20, hWnd, NULL, g_hInst, NULL);
+        g_hLblBot = CreateWindowExW(0, L"STATIC", L"Ten file BOTTOM:", WS_CHILD | WS_VISIBLE, 420, 652, 120, 20, hWnd, NULL, g_hInst, NULL);
         SendMessageW(hLblBot, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
         g_hEditBot = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"Bot_Output.csv", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 550, 648, 250, 26, hWnd, NULL, g_hInst, NULL);
         SendMessageW(g_hEditBot, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
 
-        HWND hBtnConvert = CreateWindowExW(0, L"BUTTON", L"LUU FILE DA CHINH SUA CHO MAY NEODEN YY1", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 35, 690, 1290, 48, hWnd, (HMENU)201, g_hInst, NULL);
-        SendMessageW(hBtnConvert, WM_SETFONT, (WPARAM)g_hFontTitle, TRUE);
+        g_hBtnConvert = CreateWindowExW(0, L"BUTTON", L"LUU FILE DA CHINH SUA CHO MAY NEODEN YY1", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 35, 690, 1290, 48, hWnd, (HMENU)201, g_hInst, NULL);
+        SendMessageW(g_hBtnConvert, WM_SETFONT, (WPARAM)g_hFontTitle, TRUE);
 
         // Khởi động giao diện sạch sẽ, người dùng tự chọn file cần mở
         break;
@@ -1688,10 +1858,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case 303: { // Ô Nhập Chiều rộng bo X
             if (HIWORD(wParam) == EN_CHANGE) {
                 if (g_hListView != NULL && g_hEditBoardWidth != NULL) {
-                    recalcBottomCoordinates();
-                    if (!g_showing_top) {
-                        refreshListView();
-                    }
+                    recalcCoordinates();
+                    refreshListView();
                 }
             }
             break;

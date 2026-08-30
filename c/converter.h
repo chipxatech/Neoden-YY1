@@ -68,4 +68,13 @@ void print_intro_banner(void);
 // Kích hoạt ANSI trên Windows
 void enable_console_ansi(void);
 
+typedef enum {
+    ORIGIN_C_UNKNOWN = 0,
+    ORIGIN_C_BOTTOM_LEFT = 1,   // Toàn bộ X >= 0, Y >= 0
+    ORIGIN_C_BOTTOM_RIGHT = 2,  // Toàn bộ X <= 0, Y >= 0
+    ORIGIN_C_INVALID = 3        // Không hợp lệ
+} OriginTypeC;
+
+OriginTypeC detect_origin_type_c(const ComponentList* list);
+
 #endif // CONVERTER_H
