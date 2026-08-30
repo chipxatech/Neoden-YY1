@@ -1069,10 +1069,10 @@ fn main() {
 
             // 13 Cột (Tổng 1286px, thêm 2px vừa khít 100% mép phải)
             let cols = [
-                ("STT", 45, 2), ("Designator", 100, 2), ("Comment", 200, 0), ("Footprint", 160, 0),
+                ("STT", 45, 2), ("Designator", 100, 2), ("Comment", 210, 0), ("Footprint", 166, 0),
                 ("Mid X", 92, 1), ("Mid Y", 92, 1), ("Rotation", 80, 1), ("Head", 55, 2),
                 ("FeederNo", 80, 2), ("Speed%", 80, 1), ("Pick(mm)", 88, 1), ("Place(mm)", 88, 1),
-                ("Mode", 60, 2), ("Skip", 66, 2),
+                ("Mode", 60, 2), ("Skip", 50, 2),
             ];
 
             for (i, (name, width, fmt)) in cols.iter().enumerate() {

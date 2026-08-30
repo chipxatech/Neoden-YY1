@@ -575,10 +575,10 @@ class NeoDenYY1App:
         tree_scroll_x.config(command=tree.xview)
         
         col_widths = {
-            "STT": 45, "Designator": 100, "Comment": 200, "Footprint": 160,
+            "STT": 45, "Designator": 100, "Comment": 210, "Footprint": 166,
             "Mid X(mm)": 92, "Mid Y(mm)": 92, "Rotation": 80, "Head": 55,
             "FeederNo": 80, "Mount Speed(%)": 80, "Pick Height(mm)": 88,
-            "Place Height(mm)": 88, "Mode": 60, "Skip": 66
+            "Place Height(mm)": 88, "Mode": 60, "Skip": 50
         }
         
         for col in self.cols:
