@@ -807,10 +807,10 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                                     (state.showing_top, state.top_components.len(), state.bot_components.len(), is_skip)
                                 };
                                 if is_skip {
-                                    // BẬT: Khối Màu Xanh Lá Cây
+                                    // BẬT: Khối Màu Đỏ Nổi Bật
                                     unsafe {
-                                        (*pcustom).clr_text_bk = 0x005EC522; // BGR for RGB(34, 197, 94)
-                                        (*pcustom).clr_text = 0x005EC522;
+                                        (*pcustom).clr_text_bk = 0x002626DC; // BGR for RGB(220, 38, 38)
+                                        (*pcustom).clr_text = 0x002626DC;
                                     }
                                 } else {
                                     // TẮT: Khối Màu Đen

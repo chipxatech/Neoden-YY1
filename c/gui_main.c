@@ -406,9 +406,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             if (is_top == g_showing_top) {
                                 if ((int)match_idx == item) {
                                     if (c->skip != 0) {
-                                        // BẬT: Khối Màu Xanh Lá Cây
-                                        lplvcd->clrTextBk = RGB(34, 197, 94);
-                                        lplvcd->clrText = RGB(34, 197, 94);
+                                        // BẬT: Khối Màu Đỏ Nổi Bật
+                                        lplvcd->clrTextBk = RGB(220, 38, 38);
+                                        lplvcd->clrText = RGB(220, 38, 38);
                                     } else {
                                         // TẮT: Khối Màu Đen
                                         lplvcd->clrTextBk = RGB(20, 24, 34);

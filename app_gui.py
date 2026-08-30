@@ -891,9 +891,9 @@ class NeoDenYY1App:
                 c["mode"], skip_text
             ), tags=(tag,))
             
-        self.tree_top.tag_configure("skip_on", foreground="#22C55E", font=("Segoe UI", 11, "bold"))
+        self.tree_top.tag_configure("skip_on", foreground="#DC2626", font=("Segoe UI", 11, "bold"))
         self.tree_top.tag_configure("skip_off", foreground="#1E293B", font=("Segoe UI", 11, "bold"))
-        self.tree_bot.tag_configure("skip_on", foreground="#22C55E", font=("Segoe UI", 11, "bold"))
+        self.tree_bot.tag_configure("skip_on", foreground="#DC2626", font=("Segoe UI", 11, "bold"))
         self.tree_bot.tag_configure("skip_off", foreground="#1E293B", font=("Segoe UI", 11, "bold"))
         
         self.notebook.tab(0, text=f"  Mặt TOP ({len(self.top_components)} linh kiện)  ")
