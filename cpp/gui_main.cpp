@@ -33,6 +33,7 @@ struct Component {
     double rotation = 0.0;
     int head = 0;
     int feeder_no = 1;
+    int raw_feeder_no = 0;
     int mount_speed = 100;
     double pick_height = 0.0;
     double place_height = 0.0;
@@ -571,8 +572,12 @@ static bool isValidComponentCpp(const std::wstring& des, const std::wstring& cmt
             comp.rotation = 0.0;
         }
 
-        if (col_feeder != -1 && !get_val(col_feeder).empty()) comp.feeder_no = _wtoi(get_val(col_feeder).c_str());
-        else comp.feeder_no = g_auto_match_feeder ? matchFeederSlot(comp.comment, comp.footprint) : 0;
+        if (col_feeder != -1 && !get_val(col_feeder).empty()) {
+            comp.raw_feeder_no = _wtoi(get_val(col_feeder).c_str());
+        } else {
+            comp.raw_feeder_no = 0;
+        }
+        comp.feeder_no = g_auto_match_feeder ? matchFeederSlot(comp.comment, comp.footprint) : comp.raw_feeder_no;
 
         if (col_head != -1 && !get_val(col_head).empty()) comp.head = _wtoi(get_val(col_head).c_str());
         else comp.head = 0;
@@ -1629,8 +1634,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (g_auto_match_feeder) {
                 for (auto& c : g_top_components) c.feeder_no = matchFeederSlot(c.comment, c.footprint);
                 for (auto& c : g_bot_components) c.feeder_no = matchFeederSlot(c.comment, c.footprint);
-                refreshListView();
+            } else {
+                for (auto& c : g_top_components) c.feeder_no = c.raw_feeder_no;
+                for (auto& c : g_bot_components) c.feeder_no = c.raw_feeder_no;
             }
+            refreshListView();
             break;
         }
         case 401: { // Radio TOP

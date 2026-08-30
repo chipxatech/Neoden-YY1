@@ -782,6 +782,20 @@ class NeoDenYY1App:
         selected_tab = self.notebook.index(self.notebook.select())
         self.current_layer = "TOP" if selected_tab == 0 else "BOTTOM"
         
+    def on_auto_match_toggled(self):
+        is_auto = self.auto_match_var.get()
+        if is_auto:
+            for c in self.top_components:
+                c["feeder_no"], c["head"], c["mount_speed"] = self.find_feeder_no(c["comment"], c["footprint"])
+            for c in self.bot_components:
+                c["feeder_no"], c["head"], c["mount_speed"] = self.find_feeder_no(c["comment"], c["footprint"])
+        else:
+            for c in self.top_components:
+                c["feeder_no"] = c.get("raw_feeder_no", 0)
+            for c in self.bot_components:
+                c["feeder_no"] = c.get("raw_feeder_no", 0)
+        self.refresh_tables()
+
     def open_feeder_matrix_dialog(self):
         FeederMatrixDialog(self.root, self)
         
@@ -1098,8 +1112,10 @@ class NeoDenYY1App:
                 except: head = def_head
                 
                 try:
-                    feeder_no = int(parts[col_map["feeder"]]) if "feeder" in col_map and col_map["feeder"] < len(parts) and parts[col_map["feeder"]] != "" else def_fno
-                except: feeder_no = def_fno
+                    raw_feeder_no = int(parts[col_map["feeder"]]) if "feeder" in col_map and col_map["feeder"] < len(parts) and parts[col_map["feeder"]] != "" else 0
+                except: raw_feeder_no = 0
+                
+                feeder_no = def_fno if self.auto_match_var.get() else raw_feeder_no
                 
                 try:
                     mount_speed = int(parts[col_map["speed"]]) if "speed" in col_map and col_map["speed"] < len(parts) and parts[col_map["speed"]] != "" else def_spd
@@ -1130,6 +1146,7 @@ class NeoDenYY1App:
                     "rotation": rot,
                     "head": head,
                     "feeder_no": feeder_no,
+                    "raw_feeder_no": raw_feeder_no,
                     "mount_speed": mount_speed,
                     "pick_height": pick_height,
                     "place_height": place_height,

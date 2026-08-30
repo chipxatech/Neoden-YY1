@@ -431,7 +431,8 @@ static bool is_valid_component_c(const char* des, const char* cmt) {
                 comp.rotation = (col_rot >= 0 && col_rot < (int)num_fields) ? atof(fields[col_rot]) : 0.0;
 
                 comp.head = (col_head >= 0 && col_head < (int)num_fields && fields[col_head][0] != '\0') ? atoi(fields[col_head]) : 0;
-                comp.feeder_no = (col_feeder >= 0 && col_feeder < (int)num_fields && fields[col_feeder][0] != '\0') ? atoi(fields[col_feeder]) : 1;
+                comp.raw_feeder_no = (col_feeder >= 0 && col_feeder < (int)num_fields && fields[col_feeder][0] != '\0') ? atoi(fields[col_feeder]) : 0;
+                comp.feeder_no = comp.raw_feeder_no;
                 comp.mount_speed = (col_speed >= 0 && col_speed < (int)num_fields && fields[col_speed][0] != '\0') ? atoi(fields[col_speed]) : 100;
                 comp.pick_height = (col_pick >= 0 && col_pick < (int)num_fields && fields[col_pick][0] != '\0') ? atof(fields[col_pick]) : 0.0;
                 comp.place_height = (col_place >= 0 && col_place < (int)num_fields && fields[col_place][0] != '\0') ? atof(fields[col_place]) : 0.0;

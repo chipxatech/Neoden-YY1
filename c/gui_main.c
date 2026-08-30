@@ -130,6 +130,10 @@ static void load_and_display_data(const wchar_t* wpath) {
         for (size_t i = 0; i < g_components.count; ++i) {
             g_components.items[i].feeder_no = match_feeder_slot_c(g_components.items[i].comment, g_components.items[i].footprint);
         }
+    } else {
+        for (size_t i = 0; i < g_components.count; ++i) {
+            g_components.items[i].feeder_no = g_components.items[i].raw_feeder_no;
+        }
     }
 
     refresh_list_view();
@@ -1304,8 +1308,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 for (size_t i = 0; i < g_components.count; ++i) {
                     g_components.items[i].feeder_no = match_feeder_slot_c(g_components.items[i].comment, g_components.items[i].footprint);
                 }
-                refresh_list_view();
+            } else {
+                for (size_t i = 0; i < g_components.count; ++i) {
+                    g_components.items[i].feeder_no = g_components.items[i].raw_feeder_no;
+                }
             }
+            refresh_list_view();
             break;
         }
         case 401: {

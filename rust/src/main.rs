@@ -199,6 +199,7 @@ pub struct Component {
     pub rotation: f64,
     pub head: i32,
     pub feeder_no: i32,
+    pub raw_feeder_no: i32,
     pub mount_speed: i32,
     pub pick_height: f64,
     pub place_height: f64,
@@ -636,7 +637,8 @@ fn is_valid_component_rust(des: &str, cmt: &str) -> bool {
             let mid_y = if is_mil { ry * 0.0254 } else { ry };
 
             let head: i32 = col_map.get("head").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(0);
-            let feeder_no: i32 = col_map.get("feeder").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(1);
+            let raw_feeder_no: i32 = col_map.get("feeder").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(0);
+            let feeder_no = raw_feeder_no;
             let mount_speed: i32 = col_map.get("speed").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(100);
             let pick_height: f64 = col_map.get("pick").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(0.0);
             let place_height: f64 = col_map.get("place").and_then(|&i| parts.get(i)).and_then(|s| s.parse().ok()).unwrap_or(0.0);
@@ -658,6 +660,7 @@ fn is_valid_component_rust(des: &str, cmt: &str) -> bool {
                 rotation: rot,
                 head,
                 feeder_no,
+                raw_feeder_no,
                 mount_speed,
                 pick_height,
                 place_height,
@@ -1907,6 +1910,13 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                             }
                             for c in &mut state.bot_components {
                                 c.feeder_no = match_feeder_slot_rust(&c.comment, &c.footprint);
+                            }
+                        } else {
+                            for c in &mut state.top_components {
+                                c.feeder_no = c.raw_feeder_no;
+                            }
+                            for c in &mut state.bot_components {
+                                c.feeder_no = c.raw_feeder_no;
                             }
                         }
                     }

@@ -15,6 +15,7 @@ typedef struct {
     double rotation;
     int head;
     int feeder_no;
+    int raw_feeder_no;
     int mount_speed;
     double pick_height;
     double place_height;
