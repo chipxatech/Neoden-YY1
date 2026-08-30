@@ -1050,87 +1050,78 @@ fn canonicalize_feeder_keywords_rust(input: &str) -> String {
     out
 }
 
+fn extract_tokens_rust(s: &str) -> Vec<String> {
+    let can = canonicalize_feeder_keywords_rust(s);
+    let mut tokens = Vec::new();
+    let mut cur = String::new();
+    for c in can.chars() {
+        if c.is_alphanumeric() || c == '.' {
+            cur.push(c);
+        } else {
+            if !cur.is_empty() {
+                tokens.push(cur);
+                cur = String::new();
+            }
+        }
+    }
+    if !cur.is_empty() {
+        tokens.push(cur);
+    }
+
+    let orig = tokens.clone();
+    for t in &orig {
+        if t.starts_with("0402") && t != "0402" { tokens.push("0402".to_string()); }
+        else if t.starts_with("0603") && t != "0603" { tokens.push("0603".to_string()); }
+        else if t.starts_with("0805") && t != "0805" { tokens.push("0805".to_string()); }
+        else if t.starts_with("1206") && t != "1206" { tokens.push("1206".to_string()); }
+        else if t.starts_with("1210") && t != "1210" { tokens.push("1210".to_string()); }
+        else if t.contains("sot23") { tokens.push("sot23".to_string()); tokens.push("sot-23".to_string()); }
+        else if t.contains("sod323") { tokens.push("sod323".to_string()); tokens.push("sod-323".to_string()); }
+        else if t.contains("sod123") { tokens.push("sod123".to_string()); tokens.push("sod-123".to_string()); }
+        else if t.contains("sop16") || t.contains("soic16") { tokens.push("sop16".to_string()); tokens.push("sop-16".to_string()); }
+    }
+    tokens
+}
+
 fn match_feeder_slot_rust(cmt: &str, fp: &str) -> i32 {
-    let cmt_can = canonicalize_feeder_keywords_rust(cmt);
-    let fp_can = canonicalize_feeder_keywords_rust(fp);
-    if cmt_can.is_empty() && fp_can.is_empty() { return 0; }
-
-    let packages = ["0402", "0603", "0805", "1206", "1210", "sod-123", "sod-323", "sot-23", "sop-8", "sop-16", "sma", "smb", "smc"];
-    let mut comp_pkg = "";
-    for &pkg in &packages {
-        if cmt_can.contains(pkg) || fp_can.contains(pkg) {
-            comp_pkg = pkg;
-            break;
-        }
-    }
-
-    let colors = ["red", "green", "blue", "yellow", "white", "orange"];
-    let mut comp_color = "";
-    for &clr in &colors {
-        if cmt_can.contains(clr) {
-            comp_color = clr;
-            break;
-        }
-    }
+    let mut comp_tokens = extract_tokens_rust(cmt);
+    let fp_tokens = extract_tokens_rust(fp);
+    comp_tokens.extend(fp_tokens);
+    if comp_tokens.is_empty() { return 0; }
 
     let opt = FEEDER_MATRIX_RUST.lock().unwrap();
     if let Some(ref map) = *opt {
-        // 1. Nếu có màu (LED, etc.): Khớp Màu và Kích Thước (VD: led do 0603 -> red + 0603 -> slot 34)
-        if !comp_color.is_empty() {
-            for slot in 1..=50 {
-                if let Some(val) = map.get(&slot) {
-                    let f_can = canonicalize_feeder_keywords_rust(val);
-                    if f_can.contains(comp_color) {
-                        if !comp_pkg.is_empty() {
-                            if f_can.contains(comp_pkg) { return slot; }
-                        } else {
-                            return slot;
-                        }
+        let mut best_slot = 0;
+        let mut max_matched = 0;
+
+        for slot in 1..=50 {
+            if let Some(val) = map.get(&slot) {
+                if val.trim().is_empty() { continue; }
+                let f_tokens = extract_tokens_rust(val);
+                if f_tokens.is_empty() { continue; }
+
+                let mut all_matched = true;
+                let mut match_count = 0;
+
+                for ft in &f_tokens {
+                    if ft == "smd" || ft == "chip" { continue; }
+                    if comp_tokens.contains(ft) {
+                        match_count += 1;
+                    } else {
+                        all_matched = false;
+                        break;
                     }
                 }
-            }
-        }
 
-        // 2. Khớp tuyệt đối Value-Footprint (VD: 1k-0603, 10k-0805)
-        let full_pair = format!("{}-{}", cmt_can, fp_can);
-        for slot in 1..=50 {
-            if let Some(val) = map.get(&slot) {
-                let f_can = canonicalize_feeder_keywords_rust(val);
-                if !f_can.is_empty() {
-                    if f_can == full_pair { return slot; }
-                    if let Some(dash_idx) = f_can.find('-') {
-                        let val_p = f_can[..dash_idx].trim();
-                        let fp_p = f_can[dash_idx + 1..].trim();
-                        if (val_p == cmt_can || (!val_p.is_empty() && cmt_can.contains(val_p)) || (!cmt_can.is_empty() && val_p.contains(&cmt_can))) &&
-                           (fp_p == fp_can || (!fp_p.is_empty() && fp_can.contains(fp_p)) || (!fp_can.is_empty() && fp_p.contains(&fp_can))) {
-                            return slot;
-                        }
-                    }
+                if all_matched && match_count > max_matched {
+                    max_matched = match_count;
+                    best_slot = slot;
                 }
             }
         }
-
-        // 3. Khớp chính xác Comment
-        for slot in 1..=50 {
-            if let Some(val) = map.get(&slot) {
-                let f_can = canonicalize_feeder_keywords_rust(val);
-                if !f_can.is_empty() && f_can == cmt_can {
-                    return slot;
-                }
-            }
-        }
-
-        // 4. Khớp mờ / chứa Comment
-        for slot in 1..=50 {
-            if let Some(val) = map.get(&slot) {
-                let f_can = canonicalize_feeder_keywords_rust(val);
-                if !f_can.is_empty() && (f_can.contains(&cmt_can) || cmt_can.contains(&f_can)) {
-                    return slot;
-                }
-            }
-        }
+        return best_slot;
     }
-    0 // Trả về 0 nếu chưa có cấu hình khay Feeder phù hợp
+    0
 }
 
 fn get_profiles_dir_rust() -> std::path::PathBuf {

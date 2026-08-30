@@ -879,86 +879,71 @@ class NeoDenYY1App:
         prefix = re.sub(r'\d+', '', des)
         return (cmt, prefix, num, des)
 
+    def extract_tokens(self, text):
+        can = self.canonicalize_feeder_keywords(str(text))
+        tokens = []
+        cur = ""
+        for c in can:
+            if c.isalnum() or c == '.':
+                cur += c
+            else:
+                if cur:
+                    tokens.append(cur)
+                    cur = ""
+        if cur:
+            tokens.append(cur)
+            
+        extra = []
+        for t in tokens:
+            if t.startswith("0402") and t != "0402": extra.append("0402")
+            elif t.startswith("0603") and t != "0603": extra.append("0603")
+            elif t.startswith("0805") and t != "0805": extra.append("0805")
+            elif t.startswith("1206") and t != "1206": extra.append("1206")
+            elif t.startswith("1210") and t != "1210": extra.append("1210")
+            elif "sot23" in t: extra.extend(["sot23", "sot-23"])
+            elif "sod323" in t: extra.extend(["sod323", "sod-323"])
+            elif "sod123" in t: extra.extend(["sod123", "sod-123"])
+            elif "sop16" in t or "soic16" in t: extra.extend(["sop16", "sop-16"])
+        tokens.extend(extra)
+        return tokens
+
     def find_feeder_no(self, comment, footprint):
         """Khớp linh kiện thông minh vào khay Feeder đã thiết lập theo 4 góc"""
-        cmt_can = self.canonicalize_feeder_keywords(str(comment))
-        fp_can = self.canonicalize_feeder_keywords(str(footprint))
-        if not cmt_can and not fp_can:
+        comp_tokens = self.extract_tokens(comment)
+        fp_tokens = self.extract_tokens(footprint)
+        comp_tokens.extend(fp_tokens)
+        if not comp_tokens:
             return 0, 0, 100
 
-        packages = ["0402", "0603", "0805", "1206", "1210", "sod-123", "sod-323", "sot-23", "sop-8", "sop-16", "sma", "smb", "smc"]
-        comp_pkg = ""
-        for pkg in packages:
-            if pkg in cmt_can or pkg in fp_can:
-                comp_pkg = pkg
-                break
+        best_slot = 0
+        best_head = 0
+        best_speed = 100
+        max_matched = 0
 
-        colors = ["red", "green", "blue", "yellow", "white", "orange"]
-        comp_color = ""
-        for clr in colors:
-            if clr in cmt_can:
-                comp_color = clr
-                break
-
-        # 1. Nếu có màu (LED, etc.): Khớp Màu và Kích Thước (VD: led do 0603 -> red + 0603 -> slot 34)
-        if comp_color:
-            for f_id, f_cfg in self.feeder_matrix.items():
-                cfg_raw = f_cfg.get("comment", "") if isinstance(f_cfg, dict) else str(f_cfg)
-                f_can = self.canonicalize_feeder_keywords(cfg_raw)
-                if comp_color in f_can:
-                    if comp_pkg:
-                        if comp_pkg in f_can:
-                            hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
-                            spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
-                            return int(f_id), hd, spd
-                    else:
-                        hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
-                        spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
-                        return int(f_id), hd, spd
-
-        # 2. Khớp tuyệt đối cả Comment & Footprint dạng "Value-Footprint" (VD: 1K-0603, 10K-0805, Red-0805)
-        full_pair = f"{cmt_can}-{fp_can}"
         for f_id, f_cfg in self.feeder_matrix.items():
             cfg_raw = f_cfg.get("comment", "") if isinstance(f_cfg, dict) else str(f_cfg)
-            f_can = self.canonicalize_feeder_keywords(cfg_raw)
-            if not f_can: continue
-            
-            if f_can == full_pair:
-                hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
-                spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
-                return int(f_id), hd, spd
-                
-            if "-" in f_can:
-                parts = f_can.split("-", 1)
-                val_p = parts[0].strip()
-                fp_p = parts[1].strip()
-                if (val_p == cmt_can or (val_p and val_p in cmt_can) or (cmt_can and cmt_can in val_p)) and \
-                   (fp_p == fp_can or (fp_p and fp_p in fp_can) or (fp_can and fp_can in fp_p)):
-                    hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
-                    spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
-                    return int(f_id), hd, spd
+            if not str(cfg_raw).strip(): continue
+            f_tokens = self.extract_tokens(cfg_raw)
+            if not f_tokens: continue
 
-        # 3. Khớp chính xác Comment
-        for f_id, f_cfg in self.feeder_matrix.items():
-            cfg_raw = f_cfg.get("comment", "") if isinstance(f_cfg, dict) else str(f_cfg)
-            f_can = self.canonicalize_feeder_keywords(cfg_raw)
-            if not f_can: continue
-            if f_can == cmt_can:
-                hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
-                spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
-                return int(f_id), hd, spd
+            all_matched = True
+            match_count = 0
 
-        # 4. Khớp mờ / chứa comment
-        for f_id, f_cfg in self.feeder_matrix.items():
-            cfg_raw = f_cfg.get("comment", "") if isinstance(f_cfg, dict) else str(f_cfg)
-            f_can = self.canonicalize_feeder_keywords(cfg_raw)
-            if not f_can: continue
-            if (f_can in cmt_can) or (cmt_can in f_can):
-                hd = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
-                spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
-                return int(f_id), hd, spd
-                
-        return 0, 0, 100
+            for ft in f_tokens:
+                if ft in ("smd", "chip"): continue
+                if ft in comp_tokens:
+                    match_count += 1
+                else:
+                    all_matched = False
+                    break
+
+            if all_matched and match_count > max_matched:
+                max_matched = match_count
+                best_slot = int(f_id)
+                best_head = f_cfg.get("head", 0) if isinstance(f_cfg, dict) else 0
+                best_speed = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
+
+        return best_slot, best_head, best_speed
         
     def clean_col_name(self, s):
         return "".join(c.lower() for c in s if c.isalnum())

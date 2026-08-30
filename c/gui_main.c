@@ -437,90 +437,107 @@ static void canonicalize_feeder_keywords_c(const char* src, char* dst, size_t ds
     dst[dst_len - 1] = '\0';
 }
 
+typedef struct {
+    char items[16][32];
+    int count;
+} TokenListC;
+
+static void extract_tokens_c(const char* str, TokenListC* out) {
+    out->count = 0;
+    if (!str) return;
+    char can[128] = {0};
+    canonicalize_feeder_keywords_c(str, can, sizeof(can));
+
+    char cur[32] = {0};
+    int ci = 0;
+    for (int i = 0; can[i]; ++i) {
+        char c = can[i];
+        if (isalnum((unsigned char)c) || c == '.') {
+            if (ci < (int)sizeof(cur) - 1) cur[ci++] = c;
+        } else {
+            if (ci > 0 && out->count < 16) {
+                cur[ci] = '\0';
+                strcpy(out->items[out->count++], cur);
+                ci = 0;
+            }
+        }
+    }
+    if (ci > 0 && out->count < 16) {
+        cur[ci] = '\0';
+        strcpy(out->items[out->count++], cur);
+    }
+
+    int orig_count = out->count;
+    for (int i = 0; i < orig_count && out->count < 16; ++i) {
+        const char* t = out->items[i];
+        if (strncmp(t, "0402", 4) == 0 && strcmp(t, "0402") != 0) strcpy(out->items[out->count++], "0402");
+        else if (strncmp(t, "0603", 4) == 0 && strcmp(t, "0603") != 0) strcpy(out->items[out->count++], "0603");
+        else if (strncmp(t, "0805", 4) == 0 && strcmp(t, "0805") != 0) strcpy(out->items[out->count++], "0805");
+        else if (strncmp(t, "1206", 4) == 0 && strcmp(t, "1206") != 0) strcpy(out->items[out->count++], "1206");
+        else if (strncmp(t, "1210", 4) == 0 && strcmp(t, "1210") != 0) strcpy(out->items[out->count++], "1210");
+        else if (strstr(t, "sot23") && out->count < 15) { strcpy(out->items[out->count++], "sot23"); strcpy(out->items[out->count++], "sot-23"); }
+        else if (strstr(t, "sod323") && out->count < 15) { strcpy(out->items[out->count++], "sod323"); strcpy(out->items[out->count++], "sod-323"); }
+        else if (strstr(t, "sod123") && out->count < 15) { strcpy(out->items[out->count++], "sod123"); strcpy(out->items[out->count++], "sod-123"); }
+        else if ((strstr(t, "sop16") || strstr(t, "soic16")) && out->count < 15) { strcpy(out->items[out->count++], "sop16"); strcpy(out->items[out->count++], "sop-16"); }
+    }
+}
+
 static int match_feeder_slot_c(const char* cmt, const char* fp) {
     if (!cmt && !fp) return 0;
-    char cmt_can[128] = {0};
-    char fp_can[128] = {0};
-    if (cmt) canonicalize_feeder_keywords_c(cmt, cmt_can, sizeof(cmt_can));
-    if (fp) canonicalize_feeder_keywords_c(fp, fp_can, sizeof(fp_can));
-    if (!cmt_can[0] && !fp_can[0]) return 0;
-
-    const char* packages[] = {"0402", "0603", "0805", "1206", "1210", "sod-123", "sod-323", "sot-23", "sop-8", "sop-16", "sma", "smb", "smc", NULL};
-    char comp_pkg[32] = {0};
-    for (int p = 0; packages[p]; ++p) {
-        if (strstr(cmt_can, packages[p]) || strstr(fp_can, packages[p])) {
-            strcpy(comp_pkg, packages[p]);
-            break;
-        }
+    TokenListC comp_tokens;
+    extract_tokens_c(cmt, &comp_tokens);
+    TokenListC fp_tokens;
+    extract_tokens_c(fp, &fp_tokens);
+    for (int i = 0; i < fp_tokens.count && comp_tokens.count < 16; ++i) {
+        strcpy(comp_tokens.items[comp_tokens.count++], fp_tokens.items[i]);
     }
+    if (comp_tokens.count == 0) return 0;
 
-    const char* colors[] = {"red", "green", "blue", "yellow", "white", "orange", NULL};
-    char comp_color[32] = {0};
-    for (int c = 0; colors[c]; ++c) {
-        if (strstr(cmt_can, colors[c])) {
-            strcpy(comp_color, colors[c]);
-            break;
-        }
-    }
+    int best_slot = 0;
+    int max_matched = 0;
 
-    // 1. Nếu có màu (LED, etc.)
-    if (comp_color[0]) {
-        for (int slot = 1; slot <= 50; ++slot) {
-            if (g_feeder_matrix_c[slot].comment[0]) {
-                char f_can[128] = {0};
-                canonicalize_feeder_keywords_c(g_feeder_matrix_c[slot].comment, f_can, sizeof(f_can));
-                if (strstr(f_can, comp_color)) {
-                    if (comp_pkg[0]) {
-                        if (strstr(f_can, comp_pkg)) return slot;
-                    } else {
-                        return slot;
-                    }
-                }
+    for (int slot = 1; slot <= 50; ++slot) {
+        if (!g_feeder_matrix_c[slot].comment[0]) continue;
+        TokenListC f_tokens;
+        extract_tokens_c(g_feeder_matrix_c[slot].comment, &f_tokens);
+        if (g_feeder_matrix_c[slot].footprint[0]) {
+            TokenListC ft;
+            extract_tokens_c(g_feeder_matrix_c[slot].footprint, &ft);
+            for (int i = 0; i < ft.count && f_tokens.count < 16; ++i) {
+                strcpy(f_tokens.items[f_tokens.count++], ft.items[i]);
             }
         }
-    }
+        if (f_tokens.count == 0) continue;
 
-    // 2. Khớp tuyệt đối Value-Footprint
-    char full_pair[256] = {0};
-    snprintf(full_pair, sizeof(full_pair), "%s-%s", cmt_can, fp_can);
-    for (int slot = 1; slot <= 50; ++slot) {
-        if (g_feeder_matrix_c[slot].comment[0]) {
-            char f_can[128] = {0};
-            canonicalize_feeder_keywords_c(g_feeder_matrix_c[slot].comment, f_can, sizeof(f_can));
-            if (strcmp(f_can, full_pair) == 0) return slot;
+        int all_matched = 1;
+        int match_count = 0;
 
-            char* dash = strchr(f_can, '-');
-            if (dash) {
-                *dash = '\0';
-                char* val_p = f_can;
-                char* fp_p = dash + 1;
-                if ((strcmp(val_p, cmt_can) == 0 || (val_p[0] && strstr(cmt_can, val_p)) || (cmt_can[0] && strstr(val_p, cmt_can))) &&
-                    (strcmp(fp_p, fp_can) == 0 || (fp_p[0] && strstr(fp_can, fp_p)) || (fp_can[0] && strstr(fp_p, fp_can)))) {
-                    return slot;
+        for (int i = 0; i < f_tokens.count; ++i) {
+            const char* ft = f_tokens.items[i];
+            if (strcmp(ft, "smd") == 0 || strcmp(ft, "chip") == 0) continue;
+
+            int found = 0;
+            for (int j = 0; j < comp_tokens.count; ++j) {
+                if (strcmp(comp_tokens.items[j], ft) == 0) {
+                    found = 1;
+                    break;
                 }
             }
+            if (found) {
+                match_count++;
+            } else {
+                all_matched = 0;
+                break;
+            }
+        }
+
+        if (all_matched && match_count > max_matched) {
+            max_matched = match_count;
+            best_slot = slot;
         }
     }
 
-    // 3. Khớp chính xác Comment
-    for (int slot = 1; slot <= 50; ++slot) {
-        if (g_feeder_matrix_c[slot].comment[0]) {
-            char f_can[128] = {0};
-            canonicalize_feeder_keywords_c(g_feeder_matrix_c[slot].comment, f_can, sizeof(f_can));
-            if (strcmp(f_can, cmt_can) == 0) return slot;
-        }
-    }
-
-    // 4. Khớp mờ / chứa Comment
-    for (int slot = 1; slot <= 50; ++slot) {
-        if (g_feeder_matrix_c[slot].comment[0]) {
-            char f_can[128] = {0};
-            canonicalize_feeder_keywords_c(g_feeder_matrix_c[slot].comment, f_can, sizeof(f_can));
-            if (strstr(cmt_can, f_can) || strstr(f_can, cmt_can)) return slot;
-        }
-    }
-
-    return 0; // Trả về 0 nếu chưa có cấu hình khay Feeder phù hợp
+    return best_slot;
 }
 
 static LRESULT CALLBACK InputDlgProcC(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {

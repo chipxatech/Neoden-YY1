@@ -304,77 +304,85 @@ static std::wstring canonicalizeFeederKeywordsCpp(const std::wstring& input) {
     return s;
 }
 
+static std::vector<std::wstring> extractTokensCpp(const std::wstring& str) {
+    std::wstring s = canonicalizeFeederKeywordsCpp(str);
+    std::vector<std::wstring> tokens;
+    std::wstring cur = L"";
+    for (wchar_t c : s) {
+        if (iswalnum(c) || c == L'.') {
+            cur += c;
+        } else {
+            if (!cur.empty()) {
+                tokens.push_back(cur);
+                cur = L"";
+            }
+        }
+    }
+    if (!cur.empty()) tokens.push_back(cur);
+
+    std::vector<std::wstring> extra;
+    for (const auto& t : tokens) {
+        if (t.rfind(L"0402", 0) == 0 && t != L"0402") extra.push_back(L"0402");
+        else if (t.rfind(L"0603", 0) == 0 && t != L"0603") extra.push_back(L"0603");
+        else if (t.rfind(L"0805", 0) == 0 && t != L"0805") extra.push_back(L"0805");
+        else if (t.rfind(L"1206", 0) == 0 && t != L"1206") extra.push_back(L"1206");
+        else if (t.rfind(L"1210", 0) == 0 && t != L"1210") extra.push_back(L"1210");
+        else if (t.find(L"sot23") != std::wstring::npos) { extra.push_back(L"sot23"); extra.push_back(L"sot-23"); }
+        else if (t.find(L"sod323") != std::wstring::npos) { extra.push_back(L"sod323"); extra.push_back(L"sod-323"); }
+        else if (t.find(L"sod123") != std::wstring::npos) { extra.push_back(L"sod123"); extra.push_back(L"sod-123"); }
+        else if (t.find(L"sop16") != std::wstring::npos || t.find(L"soic16") != std::wstring::npos) { extra.push_back(L"sop16"); extra.push_back(L"sop-16"); }
+    }
+    for (const auto& e : extra) tokens.push_back(e);
+    return tokens;
+}
+
 int matchFeederSlot(const std::wstring& comment, const std::wstring& footprint) {
     if (comment.empty() && footprint.empty()) return 0;
 
-    std::wstring cmt_can = canonicalizeFeederKeywordsCpp(comment);
-    std::wstring fp_can = canonicalizeFeederKeywordsCpp(footprint);
+    auto comp_tokens = extractTokensCpp(comment);
+    auto fp_tokens = extractTokensCpp(footprint);
+    for (const auto& f : fp_tokens) comp_tokens.push_back(f);
+    if (comp_tokens.empty()) return 0;
 
-    std::vector<std::wstring> packages = {L"0402", L"0603", L"0805", L"1206", L"1210", L"sod-123", L"sod-323", L"sot-23", L"sop-8", L"sop-16", L"sma", L"smb", L"smc"};
-    std::wstring comp_pkg = L"";
-    for (const auto& pkg : packages) {
-        if (cmt_can.find(pkg) != std::wstring::npos || fp_can.find(pkg) != std::wstring::npos) {
-            comp_pkg = pkg;
-            break;
+    auto hasToken = [&](const std::wstring& target) -> bool {
+        for (const auto& t : comp_tokens) {
+            if (t == target) return true;
         }
-    }
+        return false;
+    };
 
-    std::vector<std::wstring> colors = {L"red", L"green", L"blue", L"yellow", L"white", L"orange"};
-    std::wstring comp_color = L"";
-    for (const auto& clr : colors) {
-        if (cmt_can.find(clr) != std::wstring::npos) {
-            comp_color = clr;
-            break;
+    int best_slot = 0;
+    int max_matched_tokens = 0;
+
+    for (const auto& [slot, cfg] : g_feeder_matrix) {
+        if (cfg.comment.empty()) continue;
+        auto feeder_tokens = extractTokensCpp(cfg.comment);
+        if (!cfg.footprint.empty()) {
+            auto ft = extractTokensCpp(cfg.footprint);
+            for (const auto& f : ft) feeder_tokens.push_back(f);
         }
-    }
+        if (feeder_tokens.empty()) continue;
 
-    // 1. Nếu là LED hoặc linh kiện có màu và kích thước (VD: led do 0603 -> red + 0603 -> slot 34)
-    if (!comp_color.empty()) {
-        for (const auto& [slot, cfg] : g_feeder_matrix) {
-            if (cfg.comment.empty()) continue;
-            std::wstring f_can = canonicalizeFeederKeywordsCpp(cfg.comment);
-            if (f_can.find(comp_color) != std::wstring::npos) {
-                if (!comp_pkg.empty()) {
-                    if (f_can.find(comp_pkg) != std::wstring::npos) return slot;
-                } else {
-                    return slot;
-                }
+        bool all_matched = true;
+        int match_count = 0;
+
+        for (const auto& ft : feeder_tokens) {
+            if (ft == L"smd" || ft == L"chip") continue;
+            if (hasToken(ft)) {
+                match_count++;
+            } else {
+                all_matched = false;
+                break;
             }
         }
-    }
 
-    // 2. Khớp tuyệt đối cả Comment & Footprint dạng "Value-Footprint" (VD: 1K-0603, 10K-0805)
-    std::wstring full_pair = cmt_can + L"-" + fp_can;
-    for (const auto& [slot, cfg] : g_feeder_matrix) {
-        if (cfg.comment.empty()) continue;
-        std::wstring f_can = canonicalizeFeederKeywordsCpp(cfg.comment);
-        if (f_can == full_pair) return slot;
-
-        size_t dash = f_can.find(L"-");
-        if (dash != std::wstring::npos) {
-            std::wstring val_p = f_can.substr(0, dash);
-            std::wstring fp_p = f_can.substr(dash + 1);
-            if ((val_p == cmt_can || (!val_p.empty() && cmt_can.find(val_p) != std::wstring::npos) || (!cmt_can.empty() && val_p.find(cmt_can) != std::wstring::npos)) &&
-                (fp_p == fp_can || (!fp_p.empty() && fp_can.find(fp_p) != std::wstring::npos) || (!fp_can.empty() && fp_p.find(fp_can) != std::wstring::npos))) {
-                return slot;
-            }
+        if (all_matched && match_count > max_matched_tokens) {
+            max_matched_tokens = match_count;
+            best_slot = slot;
         }
     }
 
-    // 3. Khớp chính xác Comment
-    for (const auto& [slot, cfg] : g_feeder_matrix) {
-        if (cfg.comment.empty()) continue;
-        std::wstring f_can = canonicalizeFeederKeywordsCpp(cfg.comment);
-        if (f_can == cmt_can) return slot;
-    }
-
-    // 4. Khớp mờ / chứa Comment
-    for (const auto& [slot, cfg] : g_feeder_matrix) {
-        if (cfg.comment.empty()) continue;
-        std::wstring f_can = canonicalizeFeederKeywordsCpp(cfg.comment);
-        if (f_can.find(cmt_can) != std::wstring::npos || cmt_can.find(f_can) != std::wstring::npos) return slot;
-    }
-    return 0; // Trả về 0 nếu chưa có cấu hình khay Feeder phù hợp
+    return best_slot;
 }
 
 void refreshListView() {
