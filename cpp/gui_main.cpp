@@ -822,12 +822,11 @@ static std::map<int, std::wstring> getDialogFeedersCpp(HWND hWnd) {
 
 static HBRUSH g_hBrushDarkDlg = CreateSolidBrush(RGB(15, 23, 42)); // #0F172A
 static HBRUSH g_hBrushEditDark = CreateSolidBrush(RGB(15, 23, 42)); // #0F172A
-static HWND g_hLblActiveProfile = NULL;
 
 void refreshActiveProfileLabelCpp() {
-    if (g_hLblActiveProfile) {
-        std::wstring text = L"⚙️ Quy Tắc Feeder: [" + g_active_profile + L"]";
-        SetWindowTextW(g_hLblActiveProfile, text.c_str());
+    if (g_hWnd) {
+        RECT rc = {750, 0, 1380, 70};
+        InvalidateRect(g_hWnd, &rc, TRUE);
     }
 }
 
@@ -1250,8 +1249,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         g_hFontBold = CreateFontW(15, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         g_hFontNormal = CreateFontW(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
 
+        g_hWnd = hWnd;
+
         // Nút Mở Ma Trận Feeder 4 Góc trên Header
-        HWND hBtnFeeder = CreateWindowExW(0, L"BUTTON", L"⚙️ CẤU HÌNH KHAY FEEDER 4 GÓC", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1060, 20, 275, 38, hWnd, (HMENU)301, g_hInst, NULL);
+        HWND hBtnFeeder = CreateWindowExW(0, L"BUTTON", L"⚙️ Cấu Hình Feeder 4 Góc", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1145, 10, 195, 46, hWnd, (HMENU)301, g_hInst, NULL);
         SendMessageW(hBtnFeeder, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         HWND hGrp1 = CreateWindowExW(0, L"BUTTON", L" 1. File Altium Pick & Place Dau Vao ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 75, 1320, 70, hWnd, NULL, g_hInst, NULL);
@@ -1278,15 +1279,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 145, 180, 120, 24, hWnd, (HMENU)402, g_hInst, NULL);
         SendMessageW(g_hRadioBot, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 275, 183, 500, 20, hWnd, (HMENU)104, g_hInst, NULL);
+        g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 275, 183, 1000, 20, hWnd, (HMENU)104, g_hInst, NULL);
         SendMessageW(g_hStatus, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
-
-        // Hiển thị bộ quy tắc Feeder đang áp dụng ra giao diện chính
-        g_hLblActiveProfile = CreateWindowExW(0, L"STATIC", (L"⚙️ Quy Tắc Feeder: [" + g_active_profile + L"]").c_str(), WS_CHILD | WS_VISIBLE | SS_RIGHT, 780, 182, 310, 22, hWnd, (HMENU)404, g_hInst, NULL);
-        SendMessageW(g_hLblActiveProfile, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
-
-        HWND hBtnEdit = CreateWindowExW(0, L"BUTTON", L"⚙️ Cấu Hình Feeder...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 1100, 178, 200, 26, hWnd, (HMENU)403, g_hInst, NULL);
-        SendMessageW(hBtnEdit, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         g_hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 35, 210, 1290, 390, hWnd, (HMENU)105, g_hInst, NULL);
         SendMessageW(g_hListView, WM_SETFONT, (WPARAM)g_hFontNormal, TRUE);
@@ -1355,6 +1349,29 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         SelectObject(hdc, g_hFontNormal);
         SetTextColor(hdc, RGB(90, 100, 120));
         TextOutW(hdc, 90, 52, L"Tự động 13 cột • Ma trận Feeder 4 góc (1..13, 14..24, 30..39, 40..50) • Chỉnh sửa & Lưu trực tiếp", 97);
+
+        // Vẽ Badge Cấu Hình Feeder Đang Áp Dụng ở góc trên phải
+        HBRUSH hBadgeBrush = CreateSolidBrush(RGB(238, 242, 255)); // Indigo tint #EEF2FF
+        HPEN hBadgePen = CreatePen(PS_SOLID, 1, RGB(129, 140, 248)); // Indigo border #818CF8
+        HGDIOBJ oldBrush = SelectObject(hdc, hBadgeBrush);
+        HGDIOBJ oldPen = SelectObject(hdc, hBadgePen);
+
+        RoundRect(hdc, 820, 10, 1130, 56, 10, 10);
+
+        SelectObject(hdc, g_hFontNormal);
+        SetTextColor(hdc, RGB(99, 102, 241));
+        std::wstring lblTitle = L"⚙️ QUY TẮC FEEDER ÁP DỤNG:";
+        TextOutW(hdc, 835, 14, lblTitle.c_str(), (int)lblTitle.length());
+
+        SelectObject(hdc, g_hFontBold);
+        SetTextColor(hdc, RGB(67, 56, 202));
+        std::wstring lblVal = L"[ " + (g_active_profile.empty() ? L"Mac_Dinh" : g_active_profile) + L" ]";
+        TextOutW(hdc, 835, 32, lblVal.c_str(), (int)lblVal.length());
+
+        SelectObject(hdc, oldBrush);
+        SelectObject(hdc, oldPen);
+        DeleteObject(hBadgeBrush);
+        DeleteObject(hBadgePen);
 
         EndPaint(hWnd, &ps);
         break;

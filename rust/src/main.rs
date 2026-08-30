@@ -340,6 +340,7 @@ unsafe extern "system" {
     fn GetDlgItem(hDlg: HWND, nIDDlgItem: i32) -> HWND;
     fn GetDlgCtrlID(hWnd: HWND) -> i32;
     fn SetBkColor(hdc: HDC, color: u32) -> u32;
+    fn RoundRect(hdc: HDC, left: i32, top: i32, right: i32, bottom: i32, width: i32, height: i32) -> i32;
     fn EnableWindow(hWnd: HWND, bEnable: i32) -> i32;
     fn IsWindow(hWnd: HWND) -> i32;
     fn IsDialogMessageW(hDlg: HWND, lpMsg: *mut MSG) -> i32;
@@ -350,14 +351,17 @@ static mut G_BRUSH_DARK_DLG_RUST: HBRUSH = ptr::null_mut();
 static mut G_BRUSH_EDIT_DARK_RUST: HBRUSH = ptr::null_mut();
 
 unsafe fn refresh_active_profile_label_rust() {
-    let (hwnd_lbl, act_name) = {
+    let hwnd = {
         let state = STATE.lock().unwrap();
-        let act = ACTIVE_PROFILE_RUST.lock().unwrap();
-        (state.h_lbl_active_profile, act.clone())
+        state.hwnd
     };
-    if !hwnd_lbl.is_null() {
-        let text = format!("⚙️ Quy Tắc Feeder: [{}]", if act_name.is_empty() { "Mac_Dinh" } else { &act_name });
-        SetWindowTextW(hwnd_lbl, to_wstr(&text).as_ptr());
+    if !hwnd.is_null() {
+        let mut rc: RECT = std::mem::zeroed();
+        rc.left = 750;
+        rc.top = 0;
+        rc.right = 1380;
+        rc.bottom = 70;
+        InvalidateRect(hwnd, &rc, 1);
     }
 }
 
@@ -1602,6 +1606,34 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
             SetTextColor(hdc, 0x0078645A);
             let sub = to_wstr("Tự động 13 cột • Ma trận Feeder 4 góc (1..13, 14..24, 30..39, 40..50) • Chỉnh sửa & Lưu trực tiếp");
             TextOutW(hdc, 90, 52, sub.as_ptr(), (sub.len() - 1) as i32);
+
+            // ----------------------------------------------------
+            // Vẽ Badge Cấu Hình Feeder Đang Áp Dụng ở góc trên phải
+            // ----------------------------------------------------
+            let act_name = { ACTIVE_PROFILE_RUST.lock().unwrap().clone() };
+            let prof_name = if act_name.is_empty() { "Mac_Dinh" } else { &act_name };
+
+            let h_badge_brush = CreateSolidBrush(0x00FFF5EE); // Light Lavender / Indigo background
+            let h_badge_pen = CreatePen(0, 1, 0x00C4B5FD); // Accent border
+            let old_brush = SelectObject(hdc, h_badge_brush as HGDIOBJ);
+            let old_pen = SelectObject(hdc, h_badge_pen as HGDIOBJ);
+
+            RoundRect(hdc, 820, 10, 1130, 56, 10, 10);
+
+            SelectObject(hdc, f_sub);
+            SetTextColor(hdc, 0x007C3AED); // Vivid Purple #7C3AED
+            let badge_lbl = to_wstr("⚙️ QUY TẮC FEEDER ÁP DỤNG:");
+            TextOutW(hdc, 835, 14, badge_lbl.as_ptr(), (badge_lbl.len() - 1) as i32);
+
+            SelectObject(hdc, f_author);
+            SetTextColor(hdc, 0x005B21B6); // Deep Indigo
+            let badge_val = to_wstr(&format!("[ {} ]", prof_name));
+            TextOutW(hdc, 835, 32, badge_val.as_ptr(), (badge_val.len() - 1) as i32);
+
+            SelectObject(hdc, old_brush);
+            SelectObject(hdc, old_pen);
+            DeleteObject(h_badge_brush as HGDIOBJ);
+            DeleteObject(h_badge_pen as HGDIOBJ);
 
             EndPaint(hwnd, &ps);
             0
