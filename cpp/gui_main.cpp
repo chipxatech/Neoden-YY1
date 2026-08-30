@@ -895,14 +895,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         HWND hBtnConvert = CreateWindowExW(0, L"BUTTON", L"LUU FILE DA CHINH SUA CHO MAY NEODEN YY1", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 35, 690, 1290, 48, hWnd, (HMENU)201, g_hInst, NULL);
         SendMessageW(hBtnConvert, WM_SETFONT, (WPARAM)g_hFontTitle, TRUE);
 
-        std::vector<std::wstring> candidates = {L"Pick Place for MainPCB.csv", L"MainPCB.csv", L"Pick Place for MainPCB.txt", L"../Pick Place for MainPCB.csv"};
-        for (const auto& c : candidates) {
-            if (GetFileAttributesW(c.c_str()) != INVALID_FILE_ATTRIBUTES) {
-                SetWindowTextW(g_hEditInput, c.c_str());
-                loadAltiumData(c);
-                break;
-            }
-        }
+        // Khởi động giao diện sạch sẽ, người dùng tự chọn file cần mở
         break;
     }
 

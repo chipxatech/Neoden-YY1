@@ -449,13 +449,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         HWND hBtnConvert = CreateWindowExW(0, L"BUTTON", L"LUU FILE DA CHINH SUA CHO MAY NEODEN YY1", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 35, 690, 1290, 48, hWnd, (HMENU)201, g_hInst, NULL);
         SendMessageW(hBtnConvert, WM_SETFONT, (WPARAM)g_hFontTitle, TRUE);
 
-        char auto_path[MAX_PATH] = {0};
-        if (auto_detect_altium_file(auto_path, sizeof(auto_path))) {
-            wchar_t w_auto[MAX_PATH];
-            MultiByteToWideChar(CP_UTF8, 0, auto_path, -1, w_auto, MAX_PATH);
-            SetWindowTextW(g_hEditInput, w_auto);
-            load_and_display_data(w_auto);
-        }
+        // Khởi động giao diện sạch sẽ, người dùng tự chọn file cần mở
         break;
     }
 

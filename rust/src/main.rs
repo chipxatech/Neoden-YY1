@@ -1341,18 +1341,7 @@ fn main() {
             SendMessageW(btn_convert, 0x0030, font_main_title as usize, 1);
         }
 
-        let candidates = ["Pick Place for MainPCB.csv", "MainPCB.csv", "Pick Place for MainPCB.txt", "../Pick Place for MainPCB.csv"];
-        for c in &candidates {
-            if std::path::Path::new(c).exists() {
-                let h_edit = {
-                    let state = STATE.lock().unwrap();
-                    state.h_edit_input
-                };
-                SetWindowTextW(h_edit, to_wstr(c).as_ptr());
-                parse_altium_data(c);
-                break;
-            }
-        }
+        // Khởi động giao diện sạch sẽ, người dùng tự chọn file cần mở
 
         let splash_w = 500;
         let splash_h = 290;

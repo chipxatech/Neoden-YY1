@@ -380,7 +380,6 @@ class NeoDenYY1App:
         self.load_feeder_matrix_file()
         
         self.setup_ui()
-        self.auto_detect_file()
         
         SplashScreen(root, self.show_main_window)
         
@@ -513,7 +512,7 @@ class NeoDenYY1App:
         tb_bar = tk.Frame(table_frame, bg=card_bg, pady=4)
         tb_bar.pack(fill=tk.X)
         
-        self.stats_label = tk.Label(tb_bar, text="📊 Đang nạp dữ liệu...", font=("Segoe UI", 9, "bold"), fg="#38BDF8", bg=card_bg)
+        self.stats_label = tk.Label(tb_bar, text="📊 Chưa nạp file nào. Vui lòng bấm 'Chọn File...' để nạp dữ liệu.", font=("Segoe UI", 9, "bold"), fg="#38BDF8", bg=card_bg)
         self.stats_label.pack(side=tk.LEFT)
         
         tk.Button(tb_bar, text="✏️ Sửa dòng đã chọn", font=("Segoe UI", 8, "bold"), bg="#0284C7", fg="white", bd=0, padx=8, pady=3, command=self.edit_selected_row).pack(side=tk.RIGHT, padx=3)
