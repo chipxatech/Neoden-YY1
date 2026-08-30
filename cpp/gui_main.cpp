@@ -696,20 +696,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         LVCOLUMNW col = {0};
         col.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_FMT;
         
-        col.fmt = LVCFMT_CENTER; col.cx = 45;  col.pszText = (LPWSTR)L"STT";         ListView_InsertColumn(g_hListView, 0, &col);
-        col.fmt = LVCFMT_CENTER; col.cx = 100; col.pszText = (LPWSTR)L"Designator";  ListView_InsertColumn(g_hListView, 1, &col);
-        col.fmt = LVCFMT_LEFT;   col.cx = 210; col.pszText = (LPWSTR)L"Comment";     ListView_InsertColumn(g_hListView, 2, &col);
-        col.fmt = LVCFMT_LEFT;   col.cx = 166; col.pszText = (LPWSTR)L"Footprint";   ListView_InsertColumn(g_hListView, 3, &col);
-        col.fmt = LVCFMT_RIGHT;  col.cx = 92;  col.pszText = (LPWSTR)L"Mid X";       ListView_InsertColumn(g_hListView, 4, &col);
-        col.fmt = LVCFMT_RIGHT;  col.cx = 92;  col.pszText = (LPWSTR)L"Mid Y";       ListView_InsertColumn(g_hListView, 5, &col);
+        col.fmt = LVCFMT_CENTER; col.cx = 42;  col.pszText = (LPWSTR)L"STT";         ListView_InsertColumn(g_hListView, 0, &col);
+        col.fmt = LVCFMT_CENTER; col.cx = 96;  col.pszText = (LPWSTR)L"Designator";  ListView_InsertColumn(g_hListView, 1, &col);
+        col.fmt = LVCFMT_LEFT;   col.cx = 208; col.pszText = (LPWSTR)L"Comment";     ListView_InsertColumn(g_hListView, 2, &col);
+        col.fmt = LVCFMT_LEFT;   col.cx = 162; col.pszText = (LPWSTR)L"Footprint";   ListView_InsertColumn(g_hListView, 3, &col);
+        col.fmt = LVCFMT_RIGHT;  col.cx = 90;  col.pszText = (LPWSTR)L"Mid X";       ListView_InsertColumn(g_hListView, 4, &col);
+        col.fmt = LVCFMT_RIGHT;  col.cx = 90;  col.pszText = (LPWSTR)L"Mid Y";       ListView_InsertColumn(g_hListView, 5, &col);
         col.fmt = LVCFMT_RIGHT;  col.cx = 80;  col.pszText = (LPWSTR)L"Rotation";   ListView_InsertColumn(g_hListView, 6, &col);
         col.fmt = LVCFMT_CENTER; col.cx = 55;  col.pszText = (LPWSTR)L"Head";       ListView_InsertColumn(g_hListView, 7, &col);
-        col.fmt = LVCFMT_CENTER; col.cx = 80;  col.pszText = (LPWSTR)L"FeederNo";   ListView_InsertColumn(g_hListView, 8, &col);
-        col.fmt = LVCFMT_RIGHT;  col.cx = 80;  col.pszText = (LPWSTR)L"Speed%";     ListView_InsertColumn(g_hListView, 9, &col);
+        col.fmt = LVCFMT_CENTER; col.cx = 78;  col.pszText = (LPWSTR)L"FeederNo";   ListView_InsertColumn(g_hListView, 8, &col);
+        col.fmt = LVCFMT_RIGHT;  col.cx = 78;  col.pszText = (LPWSTR)L"Speed%";     ListView_InsertColumn(g_hListView, 9, &col);
         col.fmt = LVCFMT_RIGHT;  col.cx = 88;  col.pszText = (LPWSTR)L"Pick(mm)";   ListView_InsertColumn(g_hListView, 10, &col);
         col.fmt = LVCFMT_RIGHT;  col.cx = 88;  col.pszText = (LPWSTR)L"Place(mm)";  ListView_InsertColumn(g_hListView, 11, &col);
-        col.fmt = LVCFMT_CENTER; col.cx = 60;  col.pszText = (LPWSTR)L"Mode";       ListView_InsertColumn(g_hListView, 12, &col);
-        col.fmt = LVCFMT_CENTER; col.cx = 50;  col.pszText = (LPWSTR)L"Skip";       ListView_InsertColumn(g_hListView, 13, &col);
+        col.fmt = LVCFMT_CENTER; col.cx = 56;  col.pszText = (LPWSTR)L"Mode";       ListView_InsertColumn(g_hListView, 12, &col);
+        col.fmt = LVCFMT_CENTER; col.cx = 48;  col.pszText = (LPWSTR)L"Skip";       ListView_InsertColumn(g_hListView, 13, &col);
 
         // Khoi 3: Xuat File
         HWND hGrp3 = CreateWindowExW(0, L"BUTTON", L" 3. Luu / Xuat File Sau Khi Chinh Sua ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 625, 1320, 135, hWnd, NULL, g_hInst, NULL);

@@ -1067,12 +1067,12 @@ fn main() {
             SendMessageW(state.h_list_view, 0x0030, font_normal as usize, 1);
             SendMessageW(state.h_list_view, 0x1036 /* LVM_SETEXTENDEDLISTVIEWSTYLE */, 0, 0x00000020 | 0x00000001);
 
-            // 13 Cột (Tổng 1286px, thêm 2px vừa khít 100% mép phải)
+            // 13 Cột (Tổng 1259px tính sẵn thanh cuộn dọc không bị vỡ giao diện)
             let cols = [
-                ("STT", 45, 2), ("Designator", 100, 2), ("Comment", 210, 0), ("Footprint", 166, 0),
-                ("Mid X", 92, 1), ("Mid Y", 92, 1), ("Rotation", 80, 1), ("Head", 55, 2),
-                ("FeederNo", 80, 2), ("Speed%", 80, 1), ("Pick(mm)", 88, 1), ("Place(mm)", 88, 1),
-                ("Mode", 60, 2), ("Skip", 50, 2),
+                ("STT", 42, 2), ("Designator", 96, 2), ("Comment", 208, 0), ("Footprint", 162, 0),
+                ("Mid X", 90, 1), ("Mid Y", 90, 1), ("Rotation", 80, 1), ("Head", 55, 2),
+                ("FeederNo", 78, 2), ("Speed%", 78, 1), ("Pick(mm)", 88, 1), ("Place(mm)", 88, 1),
+                ("Mode", 56, 2), ("Skip", 48, 2),
             ];
 
             for (i, (name, width, fmt)) in cols.iter().enumerate() {
