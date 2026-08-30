@@ -603,9 +603,26 @@ class NeoDenYY1App:
                             self.refresh_tables()
                             active_tree, _, _ = self.get_active_tree_and_list()
                             active_tree.selection_remove(active_tree.selection())
+
+        def on_table_double_click(event):
+            region = tree.identify_region(event.x, event.y)
+            if region == "cell":
+                col = tree.identify_column(event.x)
+                item_id = tree.identify_row(event.y)
+                if col == "#14":
+                    if item_id:
+                        idx = int(item_id.split("_")[1])
+                        _, comp_list, _ = self.get_active_tree_and_list()
+                        if idx < len(comp_list):
+                            comp_list[idx]["skip"] = 0 if comp_list[idx].get("skip", 0) == 1 else 1
+                            self.refresh_tables()
+                else:
+                    if item_id:
+                        tree.selection_set(item_id)
+                        self.edit_selected_row()
                             
         tree.bind("<ButtonRelease-1>", on_table_click)
-        tree.bind("<Double-1>", lambda e: self.edit_selected_row())
+        tree.bind("<Double-1>", on_table_double_click)
         return tree
         
     def on_tab_changed(self, event):

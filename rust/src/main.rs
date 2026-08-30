@@ -328,6 +328,9 @@ unsafe extern "system" {
     ) -> HFONT;
     fn GetOpenFileNameW(lpofn: *mut OPENFILENAMEW) -> i32;
     fn ShellExecuteW(hwnd: HWND, lpOperation: *const u16, lpFile: *const u16, lpParameters: *const u16, lpDirectory: *const u16, nShowCmd: i32) -> HINSTANCE;
+    fn GetWindowRect(hWnd: HWND, lpRect: *mut RECT) -> i32;
+    fn SetWindowLongPtrW(hWnd: HWND, nIndex: i32, dwNewLong: isize) -> isize;
+    fn GetModuleHandleW(lpModuleName: *const u16) -> HINSTANCE;
 }
 
 fn to_wstr(s: &str) -> Vec<u16> {
@@ -745,6 +748,138 @@ unsafe extern "system" fn splash_proc(hwnd: HWND, msg: u32, wparam: usize, lpara
     }
 }
 
+// Edit Row Dialog trong Rust
+static EDIT_TARGET: Mutex<i32> = Mutex::new(-1);
+static EDIT_FIELDS: Mutex<[usize; 13]> = Mutex::new([0; 13]);
+
+unsafe extern "system" fn edit_dlg_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize {
+    match msg {
+        0x0111 => { // WM_COMMAND
+            let id = (wparam & 0xFFFF) as u32;
+            if id == 3099 { // Save
+                let sel = *EDIT_TARGET.lock().unwrap();
+                let hwnds = *EDIT_FIELDS.lock().unwrap();
+                let get_txt = |h_val: usize| -> String {
+                    let mut buf = [0u16; 256];
+                    GetWindowTextW(h_val as HWND, buf.as_mut_ptr(), 256);
+                    from_wstr(buf.as_ptr())
+                };
+
+                let mut state = STATE.lock().unwrap();
+                let showing_top = state.showing_top;
+                let list = if showing_top { &mut state.top_components } else { &mut state.bot_components };
+                if sel >= 0 && (sel as usize) < list.len() {
+                    let c = &mut list[sel as usize];
+                    c.designator = get_txt(hwnds[0]);
+                    c.comment = get_txt(hwnds[1]);
+                    c.footprint = get_txt(hwnds[2]);
+                    c.mid_x = get_txt(hwnds[3]).parse().unwrap_or(c.mid_x);
+                    c.mid_y = get_txt(hwnds[4]).parse().unwrap_or(c.mid_y);
+                    c.rotation = get_txt(hwnds[5]).parse().unwrap_or(c.rotation);
+                    c.head = get_txt(hwnds[6]).parse().unwrap_or(c.head);
+                    c.feeder_no = get_txt(hwnds[7]).parse().unwrap_or(c.feeder_no);
+                    c.mount_speed = get_txt(hwnds[8]).parse().unwrap_or(c.mount_speed);
+                    c.pick_height = get_txt(hwnds[9]).parse().unwrap_or(c.pick_height);
+                    c.place_height = get_txt(hwnds[10]).parse().unwrap_or(c.place_height);
+                    c.mode = get_txt(hwnds[11]).parse().unwrap_or(c.mode);
+                    c.skip = get_txt(hwnds[12]).parse().unwrap_or(c.skip);
+                }
+                drop(state);
+                refresh_list_view();
+                DestroyWindow(hwnd);
+            } else if id == 2 || id == 3098 { // Cancel
+                DestroyWindow(hwnd);
+            }
+            0
+        }
+        0x0010 => { // WM_CLOSE
+            DestroyWindow(hwnd);
+            0
+        }
+        _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+    }
+}
+
+fn edit_selected_row(parent: HWND, item_idx: i32) {
+    unsafe {
+        let c_opt = {
+            let state = STATE.lock().unwrap();
+            let list = if state.showing_top { &state.top_components } else { &state.bot_components };
+            if item_idx >= 0 && (item_idx as usize) < list.len() {
+                Some(list[item_idx as usize].clone())
+            } else {
+                None
+            }
+        };
+
+        let c = match c_opt {
+            Some(comp) => comp,
+            None => return,
+        };
+
+        *EDIT_TARGET.lock().unwrap() = item_idx;
+        let hinst = GetModuleHandleW(ptr::null());
+
+        let mut pr: RECT = std::mem::zeroed();
+        GetWindowRect(parent, &mut pr);
+        let dlg_w = 540;
+        let dlg_h = 540;
+        let dlg_x = pr.left + (pr.right - pr.left - dlg_w) / 2;
+        let dlg_y = pr.top + (pr.bottom - pr.top - dlg_h) / 2;
+
+        let title = to_wstr(&format!("✏️ Chỉnh Sửa Linh Kiện [{}] - NeoDen YY1", c.designator));
+        let h_dlg = CreateWindowExW(
+            0x00000001, to_wstr("#32770").as_ptr(), title.as_ptr(),
+            0x80000000 | 0x00C00000 | 0x00080000 | 0x10000000,
+            dlg_x, dlg_y, dlg_w, dlg_h, parent, ptr::null_mut(), hinst, ptr::null_mut()
+        );
+        if h_dlg.is_null() { return; }
+
+        SetWindowLongPtrW(h_dlg, -4 /* DWLP_DLGPROC */, edit_dlg_proc as usize as isize);
+
+        let font_bold = CreateFontW(15, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
+        let font_normal = CreateFontW(15, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
+
+        let grp1 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 📍 Thông Số Vị Trí & Tên Linh Kiện ").as_ptr(), 0x50000007, 15, 10, 245, 430, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+        SendMessageW(grp1, 0x0030, font_bold as usize, 1);
+
+        let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" ⚙️ Thông Số Máy Gắp NeoDen YY1 ").as_ptr(), 0x50000007, 270, 10, 240, 430, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+        SendMessageW(grp2, 0x0030, font_bold as usize, 1);
+
+        let make_field = |label: &str, x: i32, y: i32, w: i32, val: &str, id: u32| -> usize {
+            let h_lbl = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr(label).as_ptr(), 0x50000000, x, y, w, 18, h_dlg, ptr::null_mut(), hinst, ptr::null_mut());
+            SendMessageW(h_lbl, 0x0030, font_normal as usize, 1);
+            let h_ed = CreateWindowExW(0x00000200, to_wstr("EDIT").as_ptr(), to_wstr(val).as_ptr(), 0x50000080, x, y + 20, w, 24, h_dlg, id as *mut _, hinst, ptr::null_mut());
+            SendMessageW(h_ed, 0x0030, font_normal as usize, 1);
+            h_ed as usize
+        };
+
+        let mut hwnds = [0usize; 13];
+        hwnds[0] = make_field("Designator (Tên LK):", 30, 35, 215, &c.designator, 3001);
+        hwnds[1] = make_field("Comment (Trị số):", 30, 90, 215, &c.comment, 3002);
+        hwnds[2] = make_field("Footprint (Đóng gói):", 30, 145, 215, &c.footprint, 3003);
+        hwnds[3] = make_field("Mid X (mm):", 30, 200, 215, &format!("{:.2}", c.mid_x), 3004);
+        hwnds[4] = make_field("Mid Y (mm):", 30, 255, 215, &format!("{:.2}", c.mid_y), 3005);
+        hwnds[5] = make_field("Rotation (Góc quay °):", 30, 310, 215, &format!("{:.2}", c.rotation), 3006);
+        hwnds[6] = make_field("Head (Đầu gắp 0/1/2):", 30, 365, 215, &format!("{}", c.head), 3007);
+
+        hwnds[7] = make_field("FeederNo (Khay 1..50):", 285, 35, 210, &format!("{}", c.feeder_no), 3008);
+        hwnds[8] = make_field("Mount Speed (%):", 285, 90, 210, &format!("{}", c.mount_speed), 3009);
+        hwnds[9] = make_field("Pick Height (mm):", 285, 145, 210, &format!("{:.2}", c.pick_height), 3010);
+        hwnds[10] = make_field("Place Height (mm):", 285, 200, 210, &format!("{:.2}", c.place_height), 3011);
+        hwnds[11] = make_field("Mode (Chế độ gắp):", 285, 255, 210, &format!("{}", c.mode), 3012);
+        hwnds[12] = make_field("Skip (0=Bình thường, 1=Bỏ qua):", 285, 310, 210, &format!("{}", c.skip), 3013);
+
+        *EDIT_FIELDS.lock().unwrap() = hwnds;
+
+        let btn_save = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("💾 LƯU THAY ĐỔI").as_ptr(), 0x50000001, 230, 455, 170, 36, h_dlg, 3099 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(btn_save, 0x0030, font_bold as usize, 1);
+
+        let btn_cancel = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Hủy").as_ptr(), 0x50000000, 415, 455, 90, 36, h_dlg, 3098 as *mut _, hinst, ptr::null_mut());
+        SendMessageW(btn_cancel, 0x0030, font_normal as usize, 1);
+    }
+}
+
 // Main Window Procedure
 unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize {
     match msg {
@@ -827,18 +962,19 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                         }
                     }
                     return 0x00000000;
-                } else if code == 0xFFFFFFFE /* NM_CLICK */ || code == 0xFFFFFFFD /* NM_DBLCLK */ {
+                } else if code == 0xFFFFFFFE /* NM_CLICK */ {
                     let pia = lparam as *const NMITEMACTIVATE;
                     if !pia.is_null() {
                         let item = unsafe { (*pia).i_item };
                         let sub_item = unsafe { (*pia).i_sub_item };
-                        if item >= 0 && (sub_item == 13 || code == 0xFFFFFFFD) {
-                            let (hwnd_lv, showing_top) = {
+                        if item >= 0 && sub_item == 13 {
+                            let hwnd_lv = {
                                 let state = STATE.lock().unwrap();
-                                (state.h_list_view, state.showing_top)
+                                state.h_list_view
                             };
                             {
                                 let mut state = STATE.lock().unwrap();
+                                let showing_top = state.showing_top;
                                 let list = if showing_top { &mut state.top_components } else { &mut state.bot_components };
                                 if (item as usize) < list.len() {
                                     list[item as usize].skip = if list[item as usize].skip == 0 { 1 } else { 0 };
@@ -850,6 +986,37 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                                 lvi.state_mask = 0x0003;
                                 lvi.state = 0;
                                 SendMessageW(hwnd_lv, 0x102B /* LVM_SETITEMSTATE */, !0, &lvi as *const _ as isize);
+                            }
+                        }
+                    }
+                } else if code == 0xFFFFFFFD /* NM_DBLCLK */ {
+                    let pia = lparam as *const NMITEMACTIVATE;
+                    if !pia.is_null() {
+                        let item = unsafe { (*pia).i_item };
+                        let sub_item = unsafe { (*pia).i_sub_item };
+                        if item >= 0 {
+                            if sub_item == 13 {
+                                let hwnd_lv = {
+                                    let state = STATE.lock().unwrap();
+                                    state.h_list_view
+                                };
+                                {
+                                    let mut state = STATE.lock().unwrap();
+                                    let showing_top = state.showing_top;
+                                    let list = if showing_top { &mut state.top_components } else { &mut state.bot_components };
+                                    if (item as usize) < list.len() {
+                                        list[item as usize].skip = if list[item as usize].skip == 0 { 1 } else { 0 };
+                                    }
+                                }
+                                refresh_list_view();
+                                unsafe {
+                                    let mut lvi: LVITEMW = std::mem::zeroed();
+                                    lvi.state_mask = 0x0003;
+                                    lvi.state = 0;
+                                    SendMessageW(hwnd_lv, 0x102B /* LVM_SETITEMSTATE */, !0, &lvi as *const _ as isize);
+                                }
+                            } else {
+                                edit_selected_row(hwnd, item);
                             }
                         }
                     }
