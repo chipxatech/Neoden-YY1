@@ -59,6 +59,8 @@ HWND g_hListView = NULL;
 HWND g_hStatus = NULL;
 HWND g_hRadioTop = NULL;
 HWND g_hRadioBot = NULL;
+HWND g_hChkAutoMatch = NULL;
+bool g_auto_match_feeder = true;
 Gdiplus::Image* g_pLogoImage = NULL;
 ULONG_PTR g_gdiplusToken = 0;
 HFONT g_hFontTitle = NULL;
@@ -258,7 +260,7 @@ std::wstring normalizeComment(const std::wstring& cmt) {
 int matchFeederSlot(const std::wstring& comment, const std::wstring& footprint) {
     std::wstring cmt = toLower(comment);
     std::wstring fp = toLower(footprint);
-    if (cmt.empty() && fp.empty()) return 1;
+    if (cmt.empty() && fp.empty()) return 0;
 
     std::wstring full_pair = cmt + L"-" + fp;
 
@@ -290,7 +292,7 @@ int matchFeederSlot(const std::wstring& comment, const std::wstring& footprint) 
         std::wstring raw = toLower(cfg.comment);
         if (raw.find(cmt) != std::wstring::npos || cmt.find(raw) != std::wstring::npos) return slot;
     }
-    return 1;
+    return 0; // Trả về 0 nếu chưa có cấu hình khay Feeder phù hợp
 }
 
 void refreshListView() {
@@ -458,7 +460,7 @@ bool loadAltiumData(const std::wstring& filepath) {
         }
 
         if (col_feeder != -1 && !get_val(col_feeder).empty()) comp.feeder_no = _wtoi(get_val(col_feeder).c_str());
-        else comp.feeder_no = matchFeederSlot(comp.comment, comp.footprint);
+        else comp.feeder_no = g_auto_match_feeder ? matchFeederSlot(comp.comment, comp.footprint) : 0;
 
         if (col_head != -1 && !get_val(col_head).empty()) comp.head = _wtoi(get_val(col_head).c_str());
         else comp.head = 0;
@@ -949,9 +951,11 @@ LRESULT CALLBACK FeederDlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
                 g_feeder_matrix[slot].comment = fd[slot];
             }
 
-            // Áp dụng lại số khay cho toàn bộ linh kiện trên bảng
-            for (auto& c : g_top_components) c.feeder_no = matchFeederSlot(c.comment, c.footprint);
-            for (auto& c : g_bot_components) c.feeder_no = matchFeederSlot(c.comment, c.footprint);
+            // Áp dụng lại số khay cho toàn bộ linh kiện trên bảng nếu đang bật tự động nhận diện
+            if (g_auto_match_feeder) {
+                for (auto& c : g_top_components) c.feeder_no = matchFeederSlot(c.comment, c.footprint);
+                for (auto& c : g_bot_components) c.feeder_no = matchFeederSlot(c.comment, c.footprint);
+            }
             refreshListView();
             refreshActiveProfileLabelCpp();
 
@@ -1280,14 +1284,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         SendMessageW(hGrp2, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         // Radio Chuyen doi Mat TOP / BOTTOM
-        g_hRadioTop = CreateWindowExW(0, L"BUTTON", L"Mat TOP", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP, 35, 180, 100, 24, hWnd, (HMENU)401, g_hInst, NULL);
+        g_hRadioTop = CreateWindowExW(0, L"BUTTON", L"Mat TOP", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP, 35, 180, 95, 24, hWnd, (HMENU)401, g_hInst, NULL);
         SendMessageW(g_hRadioTop, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
         SendMessageW(g_hRadioTop, BM_SETCHECK, BST_CHECKED, 0);
 
-        g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 145, 180, 120, 24, hWnd, (HMENU)402, g_hInst, NULL);
+        g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 135, 180, 110, 24, hWnd, (HMENU)402, g_hInst, NULL);
         SendMessageW(g_hRadioBot, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 275, 183, 1000, 20, hWnd, (HMENU)104, g_hInst, NULL);
+        // Checkbox Tự động nhận diện Feeder theo cấu hình
+        g_hChkAutoMatch = CreateWindowExW(0, L"BUTTON", L"☑ Tự động nhận diện Feeder theo Cấu hình", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 255, 180, 310, 24, hWnd, (HMENU)302, g_hInst, NULL);
+        SendMessageW(g_hChkAutoMatch, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+        SendMessageW(g_hChkAutoMatch, BM_SETCHECK, g_auto_match_feeder ? BST_CHECKED : BST_UNCHECKED, 0);
+
+        g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 575, 183, 750, 20, hWnd, (HMENU)104, g_hInst, NULL);
         SendMessageW(g_hStatus, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         g_hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 35, 210, 1290, 390, hWnd, (HMENU)105, g_hInst, NULL);
@@ -1403,10 +1412,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 case CDDS_ITEMPREPAINT | CDDS_SUBITEM: {
                     int item = (int)lplvcd->nmcd.dwItemSpec;
                     int subItem = lplvcd->iSubItem;
-                    if (subItem == 13) {
-                        lplvcd->nmcd.uItemState &= ~(CDIS_SELECTED | CDIS_FOCUS | CDIS_HOT);
-                        const auto& list = g_showing_top ? g_top_components : g_bot_components;
-                        if (item >= 0 && item < (int)list.size()) {
+                    const auto& list = g_showing_top ? g_top_components : g_bot_components;
+                    if (item >= 0 && item < (int)list.size()) {
+                        if (subItem == 8) { // Cột FeederNo
+                            if (list[item].feeder_no == 0) {
+                                // CHƯA CÓ FEEDER / CHƯA NHẬN DIỆN ĐƯỢC (0): Khối Màu Đỏ Nổi Bật Cảnh Báo, Chữ Trắng
+                                lplvcd->nmcd.uItemState &= ~(CDIS_SELECTED | CDIS_FOCUS | CDIS_HOT);
+                                lplvcd->clrTextBk = RGB(220, 38, 38);
+                                lplvcd->clrText = RGB(255, 255, 255);
+                            }
+                        } else if (subItem == 13) { // Cột Skip
+                            lplvcd->nmcd.uItemState &= ~(CDIS_SELECTED | CDIS_FOCUS | CDIS_HOT);
                             if (list[item].skip != 0) {
                                 // BẬT SKIP (1): Khối Màu Đỏ Nổi Bật, Chữ Trắng (Bỏ Qua)
                                 lplvcd->clrTextBk = RGB(220, 38, 38);
@@ -1487,6 +1503,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         case 301: {
             openFeederMatrixDialog(hWnd);
+            break;
+        }
+        case 302: { // Checkbox Tự động nhận diện Feeder
+            g_auto_match_feeder = (SendMessageW(g_hChkAutoMatch, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            if (g_auto_match_feeder) {
+                for (auto& c : g_top_components) c.feeder_no = matchFeederSlot(c.comment, c.footprint);
+                for (auto& c : g_bot_components) c.feeder_no = matchFeederSlot(c.comment, c.footprint);
+                refreshListView();
+            }
             break;
         }
         case 401: { // Radio TOP

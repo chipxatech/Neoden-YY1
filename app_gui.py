@@ -607,6 +607,15 @@ class NeoDenYY1App:
         self.stats_label = tk.Label(tb_bar, text="📊 Chưa nạp file nào. Vui lòng bấm 'Chọn File...' để nạp dữ liệu.", font=("Segoe UI", 9, "bold"), fg="#38BDF8", bg=card_bg)
         self.stats_label.pack(side=tk.LEFT)
         
+        self.auto_match_var = tk.BooleanVar(value=True)
+        chk_match = ttk.Checkbutton(
+            tb_bar,
+            text="☑ Tự động nhận diện Feeder theo Cấu hình",
+            variable=self.auto_match_var,
+            command=self.on_auto_match_toggled
+        )
+        chk_match.pack(side=tk.LEFT, padx=15)
+        
         tk.Button(tb_bar, text="✏️ Sửa dòng đã chọn", font=("Segoe UI", 8, "bold"), bg="#0284C7", fg="white", bd=0, padx=8, pady=3, command=self.edit_selected_row).pack(side=tk.RIGHT, padx=3)
         tk.Button(tb_bar, text="➕ Thêm linh kiện", font=("Segoe UI", 8), bg="#334155", fg="white", bd=0, padx=8, pady=3, command=self.add_component).pack(side=tk.RIGHT, padx=3)
         tk.Button(tb_bar, text="🗑️ Xóa dòng", font=("Segoe UI", 8), bg="#DC2626", fg="white", bd=0, padx=8, pady=3, command=self.delete_selected_row).pack(side=tk.RIGHT, padx=3)
@@ -851,7 +860,7 @@ class NeoDenYY1App:
         cmt_clean = comment.strip().lower()
         fp_clean = footprint.strip().lower()
         if not cmt_clean and not fp_clean:
-            return 1, 0, 100
+            return 0, 0, 100
             
         full_pair = f"{cmt_clean}-{fp_clean}"
         
@@ -896,7 +905,7 @@ class NeoDenYY1App:
                 spd = f_cfg.get("speed", 100) if isinstance(f_cfg, dict) else 100
                 return int(f_id), hd, spd
                 
-        return 1, 0, 100
+        return 0, 0, 100
         
     def clean_col_name(self, s):
         return "".join(c.lower() for c in s if c.isalnum())
@@ -1135,17 +1144,24 @@ class NeoDenYY1App:
     def get_configured_comments(self):
         return set(v["comment"] for v in self.feeder_matrix.values() if v.get("comment", "").strip())
         
+    def on_auto_match_toggled(self):
+        if self.auto_match_var.get():
+            self.apply_feeder_assignments_to_components()
+        else:
+            self.refresh_tables()
+
     def apply_feeder_assignments_to_components(self):
-        for c in self.top_components:
-            f_no, head, spd = self.find_feeder_no(c["comment"], c["footprint"])
-            c["feeder_no"] = f_no
-            c["head"] = head
-            c["mount_speed"] = spd
-        for c in self.bot_components:
-            f_no, head, spd = self.find_feeder_no(c["comment"], c["footprint"])
-            c["feeder_no"] = f_no
-            c["head"] = head
-            c["mount_speed"] = spd
+        if self.auto_match_var.get():
+            for c in self.top_components:
+                f_no, head, spd = self.find_feeder_no(c["comment"], c["footprint"])
+                c["feeder_no"] = f_no
+                c["head"] = head
+                c["mount_speed"] = spd
+            for c in self.bot_components:
+                f_no, head, spd = self.find_feeder_no(c["comment"], c["footprint"])
+                c["feeder_no"] = f_no
+                c["head"] = head
+                c["mount_speed"] = spd
         self.refresh_tables()
         
     def refresh_tables(self):
@@ -1154,33 +1170,51 @@ class NeoDenYY1App:
         for idx, c in enumerate(self.top_components):
             is_skip = (c.get("skip", 0) == 1)
             skip_text = str(c.get("skip", 0))
-            tag = "skip_on" if is_skip else "skip_off"
+            is_missing = (c.get("feeder_no", 0) == 0)
+            
+            tags = []
+            if is_missing:
+                tags.append("feeder_missing")
+            elif is_skip:
+                tags.append("skip_on")
+            else:
+                tags.append("skip_off")
+
             self.tree_top.insert("", tk.END, iid=f"top_{idx}", values=(
                 idx + 1, c["designator"], c["comment"], c["footprint"],
                 f"{c['mid_x']:.2f}", f"{c['mid_y']:.2f}", f"{c['rotation']:.2f}",
                 c["head"], c["feeder_no"], c["mount_speed"],
                 f"{c['pick_height']:.2f}", f"{c['place_height']:.2f}",
                 c["mode"], skip_text
-            ), tags=(tag,))
+            ), tags=tuple(tags))
             
         # Refresh BOT
         self.tree_bot.delete(*self.tree_bot.get_children())
         for idx, c in enumerate(self.bot_components):
             is_skip = (c.get("skip", 0) == 1)
             skip_text = str(c.get("skip", 0))
-            tag = "skip_on" if is_skip else "skip_off"
+            is_missing = (c.get("feeder_no", 0) == 0)
+            
+            tags = []
+            if is_missing:
+                tags.append("feeder_missing")
+            elif is_skip:
+                tags.append("skip_on")
+            else:
+                tags.append("skip_off")
+
             self.tree_bot.insert("", tk.END, iid=f"bot_{idx}", values=(
                 idx + 1, c["designator"], c["comment"], c["footprint"],
                 f"{c['mid_x']:.2f}", f"{c['mid_y']:.2f}", f"{c['rotation']:.2f}",
                 c["head"], c["feeder_no"], c["mount_speed"],
                 f"{c['pick_height']:.2f}", f"{c['place_height']:.2f}",
                 c["mode"], skip_text
-            ), tags=(tag,))
+            ), tags=tuple(tags))
             
-        self.tree_top.tag_configure("skip_on", foreground="#DC2626", font=("Segoe UI", 9, "bold"))
-        self.tree_top.tag_configure("skip_off", foreground="#94A3B8", font=("Segoe UI", 9, "bold"))
-        self.tree_bot.tag_configure("skip_on", foreground="#DC2626", font=("Segoe UI", 9, "bold"))
-        self.tree_bot.tag_configure("skip_off", foreground="#94A3B8", font=("Segoe UI", 9, "bold"))
+        for tree in (self.tree_top, self.tree_bot):
+            tree.tag_configure("feeder_missing", background="#7F1D1D", foreground="#FCA5A5", font=("Segoe UI", 9, "bold"))
+            tree.tag_configure("skip_on", foreground="#DC2626", font=("Segoe UI", 9, "bold"))
+            tree.tag_configure("skip_off", foreground="#16A34A", font=("Segoe UI", 9, "bold"))
         
         self.notebook.tab(0, text=f"  Mặt TOP ({len(self.top_components)} linh kiện)  ")
         self.notebook.tab(1, text=f"  Mặt BOTTOM ({len(self.bot_components)} linh kiện)  ")

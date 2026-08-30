@@ -46,6 +46,8 @@ HWND g_hListView = NULL;
 HWND g_hStatus = NULL;
 HWND g_hRadioTop = NULL;
 HWND g_hRadioBot = NULL;
+HWND g_hChkAutoMatch_c = NULL;
+bool g_auto_match_feeder_c = true;
 HFONT g_hFontTitle = NULL;
 HFONT g_hFontNormal = NULL;
 HFONT g_hFontBold = NULL;
@@ -122,6 +124,12 @@ static void load_and_display_data(const wchar_t* wpath) {
         MultiByteToWideChar(CP_UTF8, 0, error_msg, -1, w_err, sizeof(w_err)/sizeof(wchar_t));
         MessageBoxW(g_hWnd, w_err, L"Lỗi Đọc File", MB_ICONERROR);
         return;
+    }
+
+    if (g_auto_match_feeder_c) {
+        for (size_t i = 0; i < g_components.count; ++i) {
+            g_components.items[i].feeder_no = match_feeder_slot_c(g_components.items[i].comment, g_components.items[i].footprint);
+        }
     }
 
     refresh_list_view();
@@ -387,7 +395,7 @@ static void init_default_feeder_matrix_c(void) {
 }
 
 static int match_feeder_slot_c(const char* cmt, const char* fp) {
-    if (!cmt || !cmt[0]) return 1;
+    if (!cmt || !cmt[0]) return 0;
     char cmt_lower[64] = {0};
     strncpy(cmt_lower, cmt, sizeof(cmt_lower) - 1);
     for (int i = 0; cmt_lower[i]; i++) cmt_lower[i] = (char)tolower(cmt_lower[i]);
@@ -442,7 +450,7 @@ static int match_feeder_slot_c(const char* cmt, const char* fp) {
             if (strstr(cmt_lower, f_lower) || strstr(f_lower, cmt_lower)) return slot;
         }
     }
-    return 1;
+    return 0; // Trả về 0 nếu chưa có cấu hình khay Feeder phù hợp
 }
 
 static LRESULT CALLBACK InputDlgProcC(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -800,8 +808,10 @@ static LRESULT CALLBACK FeederDlgProcC(HWND hWnd, UINT message, WPARAM wParam, L
             }
             save_profile_to_disk_c(g_active_profile_c);
 
-            for (size_t i = 0; i < g_components.count; ++i) {
-                g_components.items[i].feeder_no = match_feeder_slot_c(g_components.items[i].comment, g_components.items[i].footprint);
+            if (g_auto_match_feeder_c) {
+                for (size_t i = 0; i < g_components.count; ++i) {
+                    g_components.items[i].feeder_no = match_feeder_slot_c(g_components.items[i].comment, g_components.items[i].footprint);
+                }
             }
             refresh_list_view();
             refresh_active_profile_label_c();
@@ -964,14 +974,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         HWND hGrp2 = CreateWindowExW(0, L"BUTTON", L" 2. Toan Bo 13 Cot Chuan NeoDen YY1 (Nhap dup chuot vao dong de sua) ", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 20, 155, 1320, 460, hWnd, NULL, g_hInst, NULL);
         SendMessageW(hGrp2, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        g_hRadioTop = CreateWindowExW(0, L"BUTTON", L"Mat TOP", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP, 35, 180, 100, 24, hWnd, (HMENU)401, g_hInst, NULL);
+        g_hRadioTop = CreateWindowExW(0, L"BUTTON", L"Mat TOP", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP, 35, 180, 95, 24, hWnd, (HMENU)401, g_hInst, NULL);
         SendMessageW(g_hRadioTop, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
         SendMessageW(g_hRadioTop, BM_SETCHECK, BST_CHECKED, 0);
 
-        g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 145, 180, 120, 24, hWnd, (HMENU)402, g_hInst, NULL);
+        g_hRadioBot = CreateWindowExW(0, L"BUTTON", L"Mat BOTTOM", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 135, 180, 110, 24, hWnd, (HMENU)402, g_hInst, NULL);
         SendMessageW(g_hRadioBot, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
-        g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 275, 183, 1020, 20, hWnd, (HMENU)104, g_hInst, NULL);
+        // Checkbox Tự động nhận diện Feeder
+        g_hChkAutoMatch_c = CreateWindowExW(0, L"BUTTON", L"☑ Tự động nhận diện Feeder theo Cấu hình", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 255, 180, 310, 24, hWnd, (HMENU)302, g_hInst, NULL);
+        SendMessageW(g_hChkAutoMatch_c, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+        SendMessageW(g_hChkAutoMatch_c, BM_SETCHECK, g_auto_match_feeder_c ? BST_CHECKED : BST_UNCHECKED, 0);
+
+        g_hStatus = CreateWindowExW(0, L"STATIC", L"Chua chon file CAD nao", WS_CHILD | WS_VISIBLE, 575, 183, 750, 20, hWnd, (HMENU)104, g_hInst, NULL);
         SendMessageW(g_hStatus, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
         g_hListView = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 35, 210, 1290, 390, hWnd, (HMENU)105, g_hInst, NULL);
@@ -1088,14 +1103,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 case CDDS_ITEMPREPAINT | CDDS_SUBITEM: {
                     int item = (int)lplvcd->nmcd.dwItemSpec;
                     int subItem = lplvcd->iSubItem;
-                    if (subItem == 13) {
-                        lplvcd->nmcd.uItemState &= ~(CDIS_SELECTED | CDIS_FOCUS | CDIS_HOT);
-                        size_t match_idx = 0;
-                        for (size_t i = 0; i < g_components.count; ++i) {
-                            Component* c = &g_components.items[i];
-                            bool is_top = (strcmp(c->layer, "TopLayer") == 0 || strcmp(c->layer, "Top") == 0);
-                            if (is_top == g_showing_top) {
-                                if ((int)match_idx == item) {
+                    size_t match_idx = 0;
+                    for (size_t i = 0; i < g_components.count; ++i) {
+                        Component* c = &g_components.items[i];
+                        bool is_top = (strcmp(c->layer, "TopLayer") == 0 || strcmp(c->layer, "Top") == 0);
+                        if (is_top == g_showing_top) {
+                            if ((int)match_idx == item) {
+                                if (subItem == 8) { // Cột FeederNo
+                                    if (c->feeder_no == 0) {
+                                        // CHƯA CÓ FEEDER / CHƯA NHẬN DIỆN ĐƯỢC (0): Khối Màu Đỏ Nổi Bật Cảnh Báo, Chữ Trắng
+                                        lplvcd->nmcd.uItemState &= ~(CDIS_SELECTED | CDIS_FOCUS | CDIS_HOT);
+                                        lplvcd->clrTextBk = RGB(220, 38, 38);
+                                        lplvcd->clrText = RGB(255, 255, 255);
+                                    }
+                                } else if (subItem == 13) { // Cột Skip
+                                    lplvcd->nmcd.uItemState &= ~(CDIS_SELECTED | CDIS_FOCUS | CDIS_HOT);
                                     if (c->skip != 0) {
                                         // BẬT SKIP (1): Khối Màu Đỏ Nổi Bật, Chữ Trắng (Bỏ Qua)
                                         lplvcd->clrTextBk = RGB(220, 38, 38);
@@ -1105,10 +1127,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                                         lplvcd->clrTextBk = RGB(22, 163, 74); // #16A34A (Màu Xanh Lá Cây)
                                         lplvcd->clrText = RGB(255, 255, 255);
                                     }
-                                    break;
                                 }
-                                match_idx++;
+                                break;
                             }
+                            match_idx++;
                         }
                     }
                     return CDRF_DODEFAULT;
@@ -1180,6 +1202,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         case 301: {
             open_feeder_matrix_dialog_c(hWnd);
+            break;
+        }
+        case 302: { // Checkbox Tự động nhận diện Feeder
+            g_auto_match_feeder_c = (SendMessageW(g_hChkAutoMatch_c, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            if (g_auto_match_feeder_c) {
+                for (size_t i = 0; i < g_components.count; ++i) {
+                    g_components.items[i].feeder_no = match_feeder_slot_c(g_components.items[i].comment, g_components.items[i].footprint);
+                }
+                refresh_list_view();
+            }
             break;
         }
         case 401: {

@@ -217,7 +217,9 @@ struct AppState {
     h_status: HWND,
     h_radio_top: HWND,
     h_radio_bot: HWND,
+    h_chk_auto_match: HWND,
     h_lbl_active_profile: HWND,
+    auto_match_feeder: bool,
     font_main_title: HFONT,
     font_main_bold: HFONT,
     font_main_sub: HFONT,
@@ -243,7 +245,9 @@ static STATE: Mutex<AppState> = Mutex::new(AppState {
     h_status: ptr::null_mut(),
     h_radio_top: ptr::null_mut(),
     h_radio_bot: ptr::null_mut(),
+    h_chk_auto_match: ptr::null_mut(),
     h_lbl_active_profile: ptr::null_mut(),
+    auto_match_feeder: true,
     font_main_title: ptr::null_mut(),
     font_main_bold: ptr::null_mut(),
     font_main_sub: ptr::null_mut(),
@@ -657,6 +661,11 @@ fn parse_altium_data(filepath: &str) -> bool {
         return false;
     }
 
+    let auto_match = {
+        let state = STATE.lock().unwrap();
+        state.auto_match_feeder
+    };
+
     let sort_comps = |list: &mut Vec<Component>| {
         list.sort_by(|a, b| {
             if a.comment != b.comment {
@@ -665,15 +674,10 @@ fn parse_altium_data(filepath: &str) -> bool {
                 a.designator.cmp(&b.designator)
             }
         });
-        let mut feeder_map = std::collections::HashMap::new();
-        let mut next_f = 1;
-        for c in list.iter_mut() {
-            let fno = *feeder_map.entry(c.comment.clone()).or_insert_with(|| {
-                let f = next_f;
-                next_f += 1;
-                f
-            });
-            c.feeder_no = fno;
+        if auto_match {
+            for c in list.iter_mut() {
+                c.feeder_no = match_feeder_slot_rust(&c.comment, &c.footprint);
+            }
         }
     };
 
@@ -1012,7 +1016,7 @@ fn init_default_feeder_matrix_rust() {
 fn match_feeder_slot_rust(cmt: &str, fp: &str) -> i32 {
     let cmt_clean = cmt.trim().to_lowercase();
     let fp_clean = fp.trim().to_lowercase();
-    if cmt_clean.is_empty() && fp_clean.is_empty() { return 1; }
+    if cmt_clean.is_empty() && fp_clean.is_empty() { return 0; }
 
     let full_pair = format!("{}-{}", cmt_clean, fp_clean);
     let opt = FEEDER_MATRIX_RUST.lock().unwrap();
@@ -1055,7 +1059,7 @@ fn match_feeder_slot_rust(cmt: &str, fp: &str) -> i32 {
             }
         }
     }
-    1
+    0 // Trả về 0 nếu chưa có cấu hình khay Feeder phù hợp
 }
 
 fn get_profiles_dir_rust() -> std::path::PathBuf {
@@ -1433,14 +1437,16 @@ unsafe extern "system" fn feeder_dlg_proc_rust(hwnd: HWND, msg: u32, wparam: usi
                     *opt = Some(map);
                 }
 
-                // Cập nhật lại số khay cho toàn bộ linh kiện
+                // Cập nhật lại số khay cho toàn bộ linh kiện nếu đang bật tự động nhận diện
                 {
                     let mut state = STATE.lock().unwrap();
-                    for c in state.top_components.iter_mut() {
-                        c.feeder_no = match_feeder_slot_rust(&c.comment, &c.footprint);
-                    }
-                    for c in state.bot_components.iter_mut() {
-                        c.feeder_no = match_feeder_slot_rust(&c.comment, &c.footprint);
+                    if state.auto_match_feeder {
+                        for c in state.top_components.iter_mut() {
+                            c.feeder_no = match_feeder_slot_rust(&c.comment, &c.footprint);
+                        }
+                        for c in state.bot_components.iter_mut() {
+                            c.feeder_no = match_feeder_slot_rust(&c.comment, &c.footprint);
+                        }
                     }
                 }
                 refresh_list_view();
@@ -1653,25 +1659,33 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                         } else if draw_stage == (0x00010001 | 0x00020000) /* CDDS_ITEMPREPAINT | CDDS_SUBITEM */ {
                             let item = unsafe { (*pcustom).nmcd.dw_item_spec } as usize;
                             let sub_item = unsafe { (*pcustom).i_sub_item };
-                            if sub_item == 13 {
-                                unsafe {
-                                    (*pcustom).nmcd.u_item_state &= !(0x00000001 | 0x00000010 | 0x00000040);
+                            let (_showing_top, is_skip, feeder_no) = {
+                                let state = STATE.lock().unwrap();
+                                let list = if state.showing_top { &state.top_components } else { &state.bot_components };
+                                if item < list.len() {
+                                    (state.showing_top, list[item].skip != 0, list[item].feeder_no)
+                                } else {
+                                    (state.showing_top, false, 1)
                                 }
-                                let (_showing_top, _top_len, _bot_len, is_skip) = {
-                                    let state = STATE.lock().unwrap();
-                                    let list = if state.showing_top { &state.top_components } else { &state.bot_components };
-                                    let is_skip = if item < list.len() { list[item].skip != 0 } else { false };
-                                    (state.showing_top, state.top_components.len(), state.bot_components.len(), is_skip)
-                                };
-                                if is_skip {
-                                    // BẬT SKIP (1): Khối Màu Đỏ Nổi Bật, Chữ Trắng (Bỏ Qua)
+                            };
+                            if sub_item == 8 { // Cột FeederNo
+                                if feeder_no == 0 {
+                                    // CHƯA CÓ FEEDER / CHƯA NHẬN DIỆN ĐƯỢC (0): Khối Màu Đỏ Nổi Bật Cảnh Báo, Chữ Trắng
                                     unsafe {
+                                        (*pcustom).nmcd.u_item_state &= !(0x00000001 | 0x00000010 | 0x00000040);
                                         (*pcustom).clr_text_bk = 0x002626DC; // BGR for RGB(220, 38, 38)
                                         (*pcustom).clr_text = 0x00FFFFFF;
                                     }
-                                } else {
-                                    // MẶC ĐỊNH (0): Khối Màu Xanh Lá Cây Đẹp (Gắp Linh Kiện)
-                                    unsafe {
+                                }
+                            } else if sub_item == 13 { // Cột Skip
+                                unsafe {
+                                    (*pcustom).nmcd.u_item_state &= !(0x00000001 | 0x00000010 | 0x00000040);
+                                    if is_skip {
+                                        // BẬT SKIP (1): Khối Màu Đỏ Nổi Bật, Chữ Trắng (Bỏ Qua)
+                                        (*pcustom).clr_text_bk = 0x002626DC; // BGR for RGB(220, 38, 38)
+                                        (*pcustom).clr_text = 0x00FFFFFF;
+                                    } else {
+                                        // MẶC ĐỊNH (0): Khối Màu Xanh Lá Cây Đẹp (Gắp Linh Kiện)
                                         (*pcustom).clr_text_bk = 0x004AA316; // BGR for RGB(22, 163, 74)
                                         (*pcustom).clr_text = 0x00FFFFFF;
                                     }
@@ -1788,6 +1802,25 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                 }
                 301 => { // Feeder Matrix Config Dialog
                     open_feeder_matrix_dialog_rust(hwnd);
+                }
+                302 => { // Checkbox Auto Match Feeder
+                    let is_checked = {
+                        let state = STATE.lock().unwrap();
+                        SendMessageW(state.h_chk_auto_match, 0x00F0 /* BM_GETCHECK */, 0, 0) == 1
+                    };
+                    {
+                        let mut state = STATE.lock().unwrap();
+                        state.auto_match_feeder = is_checked;
+                        if is_checked {
+                            for c in &mut state.top_components {
+                                c.feeder_no = match_feeder_slot_rust(&c.comment, &c.footprint);
+                            }
+                            for c in &mut state.bot_components {
+                                c.feeder_no = match_feeder_slot_rust(&c.comment, &c.footprint);
+                            }
+                        }
+                    }
+                    refresh_list_view();
                 }
                 401 => { // Radio TOP
                     {
@@ -1956,14 +1989,18 @@ fn main() {
             let grp2 = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr(" 2. Toàn Bộ 13 Cột Chuẩn NeoDen YY1 (Nhấp đúp chuột vào dòng để chỉnh sửa) ").as_ptr(), 0x50000007, 20, 155, 1320, 460, hwnd, ptr::null_mut(), hinst, ptr::null_mut());
             SendMessageW(grp2, 0x0030, font_bold as usize, 1);
 
-            state.h_radio_top = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt TOP").as_ptr(), 0x50000009, 35, 180, 100, 24, hwnd, 401 as *mut _, hinst, ptr::null_mut());
+            state.h_radio_top = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt TOP").as_ptr(), 0x50000009, 35, 180, 95, 24, hwnd, 401 as *mut _, hinst, ptr::null_mut());
             SendMessageW(state.h_radio_top, 0x0030, font_bold as usize, 1);
             SendMessageW(state.h_radio_top, 0x00F1 /* BM_SETCHECK */, 1, 0);
 
-            state.h_radio_bot = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt BOTTOM").as_ptr(), 0x50000009, 145, 180, 120, 24, hwnd, 402 as *mut _, hinst, ptr::null_mut());
+            state.h_radio_bot = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("Mặt BOTTOM").as_ptr(), 0x50000009, 135, 180, 110, 24, hwnd, 402 as *mut _, hinst, ptr::null_mut());
             SendMessageW(state.h_radio_bot, 0x0030, font_bold as usize, 1);
 
-            state.h_status = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chưa chọn file CAD nào").as_ptr(), 0x50000000, 275, 183, 1020, 20, hwnd, 104 as *mut _, hinst, ptr::null_mut());
+            state.h_chk_auto_match = CreateWindowExW(0, to_wstr("BUTTON").as_ptr(), to_wstr("☑ Tự động nhận diện Feeder theo Cấu hình").as_ptr(), 0x50000003 /* BS_AUTOCHECKBOX */, 255, 180, 310, 24, hwnd, 302 as *mut _, hinst, ptr::null_mut());
+            SendMessageW(state.h_chk_auto_match, 0x0030, font_bold as usize, 1);
+            SendMessageW(state.h_chk_auto_match, 0x00F1 /* BM_SETCHECK */, 1, 0);
+
+            state.h_status = CreateWindowExW(0, to_wstr("STATIC").as_ptr(), to_wstr("Chưa chọn file CAD nào").as_ptr(), 0x50000000, 575, 183, 750, 20, hwnd, 104 as *mut _, hinst, ptr::null_mut());
             SendMessageW(state.h_status, 0x0030, font_bold as usize, 1);
 
             state.h_list_view = CreateWindowExW(0x00000200, to_wstr("SysListView32").as_ptr(), to_wstr("").as_ptr(), 0x50000001 | 0x0004, 35, 210, 1290, 390, hwnd, 105 as *mut _, hinst, ptr::null_mut());
