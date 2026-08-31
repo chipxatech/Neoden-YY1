@@ -368,6 +368,7 @@ unsafe extern "system" {
     fn GetWindowRect(hWnd: HWND, lpRect: *mut RECT) -> i32;
     fn SetWindowLongPtrW(hWnd: HWND, nIndex: i32, dwNewLong: isize) -> isize;
     fn GetModuleHandleW(lpModuleName: *const u16) -> HINSTANCE;
+    fn GetModuleFileNameW(hModule: HINSTANCE, lpFilename: *mut u16, nSize: u32) -> u32;
     fn SetFocus(hWnd: HWND) -> HWND;
     fn CallWindowProcW(lpPrevWndFunc: isize, hWnd: HWND, Msg: u32, wParam: usize, lParam: isize) -> isize;
     fn GetDlgItem(hDlg: HWND, nIDDlgItem: i32) -> HWND;
@@ -2358,12 +2359,54 @@ fn main() {
         };
         GdiplusStartup(&mut gdi_token, &gdi_input, ptr::null_mut());
 
+        let mut exe_buf = [0u16; 512];
+        let mut logo_paths: Vec<String> = vec![
+            "assets/logo.png".to_string(),
+            "../assets/logo.png".to_string(),
+            "logo.png".to_string(),
+        ];
+        let mut icon_paths: Vec<String> = vec![
+            "assets/app_icon.ico".to_string(),
+            "../assets/app_icon.ico".to_string(),
+            "app_icon.ico".to_string(),
+        ];
+
+        if GetModuleFileNameW(ptr::null_mut(), exe_buf.as_mut_ptr(), 512) > 0 {
+            let exe_full = from_wstr(exe_buf.as_ptr());
+            if let Some(parent) = std::path::Path::new(&exe_full).parent() {
+                logo_paths.push(parent.join("assets/logo.png").to_string_lossy().to_string());
+                logo_paths.push(parent.join("../assets/logo.png").to_string_lossy().to_string());
+                logo_paths.push(parent.join("logo.png").to_string_lossy().to_string());
+
+                icon_paths.push(parent.join("assets/app_icon.ico").to_string_lossy().to_string());
+                icon_paths.push(parent.join("../assets/app_icon.ico").to_string_lossy().to_string());
+                icon_paths.push(parent.join("app_icon.ico").to_string_lossy().to_string());
+            }
+        }
+
         let mut logo_bitmap: GpBitmap = ptr::null_mut();
-        let logo_candidates = ["assets/logo.png", "../assets/logo.png", "logo.png"];
-        for c in &logo_candidates {
+        for c in &logo_paths {
             let w_path = to_wstr(c);
             if GdipCreateBitmapFromFile(w_path.as_ptr(), &mut logo_bitmap) == 0 && !logo_bitmap.is_null() {
                 break;
+            }
+        }
+
+        let hinst = GetModuleHandleW(ptr::null());
+
+        let mut h_icon_big = LoadImageW(hinst, 1 as *const u16, 1 /* IMAGE_ICON */, 32, 32, 0x0000 /* LR_DEFAULTCOLOR */);
+        if h_icon_big.is_null() {
+            for ip in &icon_paths {
+                h_icon_big = LoadImageW(ptr::null_mut(), to_wstr(ip).as_ptr(), 1, 32, 32, 0x0010 /* LR_LOADFROMFILE */);
+                if !h_icon_big.is_null() { break; }
+            }
+        }
+
+        let mut h_icon_sm = LoadImageW(hinst, 1 as *const u16, 1 /* IMAGE_ICON */, 16, 16, 0x0000 /* LR_DEFAULTCOLOR */);
+        if h_icon_sm.is_null() {
+            for ip in &icon_paths {
+                h_icon_sm = LoadImageW(ptr::null_mut(), to_wstr(ip).as_ptr(), 1, 16, 16, 0x0010 /* LR_LOADFROMFILE */);
+                if !h_icon_sm.is_null() { break; }
             }
         }
 
@@ -2383,7 +2426,6 @@ fn main() {
 
         init_default_feeder_matrix_rust();
 
-        let hinst = GetModuleHandleW(ptr::null());
         let class_name = to_wstr("NeoDenYY1RustClass");
         let splash_class_name = to_wstr("NeoDenYY1SplashClass");
 
@@ -2392,6 +2434,8 @@ fn main() {
         splash_wc.style = 0x0002 | 0x0001;
         splash_wc.lpfn_wnd_proc = Some(splash_proc);
         splash_wc.h_instance = hinst;
+        splash_wc.h_icon = h_icon_big;
+        splash_wc.h_icon_sm = h_icon_sm;
         splash_wc.h_cursor = LoadCursorW(ptr::null_mut(), 32512 as *const u16);
         splash_wc.lpsz_class_name = splash_class_name.as_ptr();
         RegisterClassExW(&splash_wc);
@@ -2401,6 +2445,8 @@ fn main() {
         wc.style = 0x0002 | 0x0001;
         wc.lpfn_wnd_proc = Some(wnd_proc);
         wc.h_instance = hinst;
+        wc.h_icon = h_icon_big;
+        wc.h_icon_sm = h_icon_sm;
         wc.h_cursor = LoadCursorW(ptr::null_mut(), 32512 as *const u16);
         wc.hbr_background = (15 + 1) as HBRUSH;
         wc.lpsz_class_name = class_name.as_ptr();
@@ -2419,6 +2465,11 @@ fn main() {
             win_x, win_y, win_w, win_h,
             ptr::null_mut(), ptr::null_mut(), hinst, ptr::null_mut()
         );
+
+        if !hwnd.is_null() {
+            SendMessageW(hwnd, 0x0080 /* WM_SETICON */, 1 /* ICON_BIG */, h_icon_big as isize);
+            SendMessageW(hwnd, 0x0080 /* WM_SETICON */, 0 /* ICON_SMALL */, h_icon_sm as isize);
+        }
 
         let font_normal = CreateFontW(14, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
         let font_bold = CreateFontW(15, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, to_wstr("Segoe UI").as_ptr());
