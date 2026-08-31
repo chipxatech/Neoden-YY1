@@ -212,6 +212,9 @@ Trong thư mục [`SMT NEODEN/`](file:///c:/Users/Admin/Desktop/chipxa/Neoden-YY
 
 ## 🏢 BẢN QUYỀN & THÔNG TIN DOANH NGHIỆP
 
-* **Tên doanh nghiệp**: **CÔNG TY TNHH CÔNG NGHỆ CHIPXA**
+* **Đơn vị phát triển**: **CÔNG TY TNHH CÔNG NGHỆ CHIPXA**
 * **Lĩnh vực**: Nghiên cứu, thiết kế phần cứng điện tử, lập trình nhúng & tự động hóa dây chuyền SMT.
+* **Email liên hệ**: [info@chipxa.vn](mailto:info@chipxa.vn)
+* **Website**: [chipxa.vn](https://chipxa.vn) | [chipxa.com](https://chipxa.com)
+* **Hotline hỗ trợ kỹ thuật**: **0928 0000 84** *(0928.000.084)*
 * **Bản quyền phần mềm**: Mọi quyền được bảo hộ bởi CÔNG TY TNHH CÔNG NGHỆ CHIPXA.
