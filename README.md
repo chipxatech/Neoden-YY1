@@ -11,6 +11,12 @@
 
 Dự án cung cấp 4 phiên bản giao diện đa ngôn ngữ (**C++ Win32**, **Rust Native**, **Pure C Win32**, và **Python Tkinter**), tích hợp màn hình Intro chào mừng (*Splash Screen*), logo nhận diện thương hiệu CHIPXA, bảng chỉnh sửa tham số trực quan và hệ thống quản lý khay Feeder 4 góc thông minh.
 
+### 📸 HÌNH ẢNH GIAO DIỆN THỰC TẾ
+
+| Màn hình Splash Screen mở đầu | Giao diện làm việc chính (Bảng 13 cột) |
+| :---: | :---: |
+| ![Màn hình Splash Screen mở đầu](assets/gui_splash_screen.png) | ![Giao diện làm việc chính](assets/gui_main_interface.png) |
+
 ---
 
 ## 🖥️ CÁC PHIÊN BẢN GIAO DIỆN & CÁCH KHỞI CHẠY
@@ -91,6 +97,10 @@ Máy NeoDen YY1 bố trí 50 khay Feeder tại 4 góc làm việc vật lý:
 * **Lưu ma trận hiện hành**: Lưu vào file [`feeder_matrix.json`](file:///c:/Users/Admin/Desktop/chipxa/Neoden-YY1/feeder_matrix.json) để tự động ghi nhớ cấu hình khi tắt mở phần mềm.
 * **Quản lý Profile theo loại bo mạch**: Lưu trong thư mục [`feeder_profiles/`](file:///c:/Users/Admin/Desktop/chipxa/Neoden-YY1/feeder_profiles) (ví dụ: `Bo_LED_Chieu_Sang.json`, `Bo_MCU_Dieu_Khien.json`, `Bo_Nguon_Power.json`, `Mac_Dinh.json`).
 
+<p align="center">
+  <img src="assets/gui_feeder_matrix_dialog.png" alt="Hộp thoại cấu hình 50 khay Feeder 4 góc" width="550" />
+</p>
+
 ---
 
 ## 📁 CẤU TRÚC THƯ MỤC DỰ ÁN
@@ -99,7 +109,10 @@ Máy NeoDen YY1 bố trí 50 khay Feeder tại 4 góc làm việc vật lý:
 Neoden-YY1/
 ├── assets/
 │   ├── app_icon.ico               # Icon ứng dụng Windows
-│   └── logo.png                   # Logo CHIPXA hiển thị trên Splash Screen & GUI
+│   ├── logo.png                   # Logo CHIPXA hiển thị trên Splash Screen & GUI
+│   ├── gui_splash_screen.png      # Ảnh chụp màn hình Splash Screen thực tế
+│   ├── gui_main_interface.png     # Ảnh chụp giao diện làm việc chính thực tế
+│   └── gui_feeder_matrix_dialog.png # Ảnh chụp hộp thoại cấu hình Feeder thực tế
 │
 ├── feeder_profiles/               # Danh mục các Profile cấu hình Feeder đã lưu
 │   ├── Bo_LED_Chieu_Sang.json
